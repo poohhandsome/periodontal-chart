@@ -23,24 +23,17 @@ export const createChartingOrder = (missingTeeth = [], modes = { pd: true, re: t
 
   const siteModes = ['pd', 're'].filter(m => modes[m]);
 
+  // A more standard full-arch "snake" sequence
   const archSequence = [
-    // Q1
-    { teeth: availableTeeth(UPPER_RIGHT), surface: 'buccal' },
-    { teeth: availableTeeth(UPPER_RIGHT.slice().reverse()), surface: 'lingual' },
-    // Q2
-    { teeth: availableTeeth(UPPER_LEFT), surface: 'buccal' },
-    { teeth: availableTeeth(UPPER_LEFT.slice().reverse()), surface: 'lingual' },
-    // Q3
-    { teeth: availableTeeth(LOWER_LEFT.slice().reverse()), surface: 'lingual' },
-    { teeth: availableTeeth(LOWER_LEFT), surface: 'buccal' },
-    // Q4
-    { teeth: availableTeeth(LOWER_RIGHT), surface: 'lingual' },
-    { teeth: availableTeeth(LOWER_RIGHT.slice().reverse()), surface: 'buccal' },
+    { teeth: availableTeeth([...UPPER_RIGHT, ...UPPER_LEFT]), surface: 'buccal' }, // 18 -> 28
+    { teeth: availableTeeth([...UPPER_LEFT.slice().reverse(), ...UPPER_RIGHT.slice().reverse()]), surface: 'lingual' }, // 28 -> 18
+    { teeth: availableTeeth([...LOWER_LEFT.slice().reverse(), ...LOWER_RIGHT.slice().reverse()]), surface: 'lingual' }, // 38 -> 48
+    { teeth: availableTeeth([...LOWER_RIGHT, ...LOWER_LEFT]), surface: 'buccal' }, // 48 -> 38
   ];
 
   archSequence.forEach(({ teeth, surface }) => {
     const sites = surface === 'buccal' ? BUCCAL_SITES : LINGUAL_SITES;
-
+    
     teeth.forEach(toothId => {
       // Add site-specific measurements (PD, RE) for each site of the tooth.
       sites.forEach(site => {

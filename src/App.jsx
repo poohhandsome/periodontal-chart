@@ -64,15 +64,27 @@ export default function App() {
       toggleMissingTooth(toothId);
       return;
     }
-    const orderIndex = CHARTING_ORDER.findIndex(item => 
+    
+    // Find the first entry in the order for the exact clicked site.
+    let orderIndex = CHARTING_ORDER.findIndex(item => 
         item.toothId === toothId && item.surface === surface && item.site === site
     );
+    
+    // **FIX for MGJ**: If no match is found, check if an MGJ step exists for this tooth surface.
+    // This allows clicking any buccal site to start an MGJ measurement.
+    if (orderIndex === -1 && surface === 'buccal') {
+        orderIndex = CHARTING_ORDER.findIndex(item => 
+            item.toothId === toothId && item.surface === surface && item.type === 'mgj'
+        );
+    }
     
     if (orderIndex !== -1) {
       setChartingState({ isActive: true, orderIndex });
     } else if (Object.values(chartingModes).every(m => !m)) {
         alert("Please select at least one charting mode.");
     } else {
+        // This message helps if the user clicks a site that isn't in the current sequence
+        // (e.g., clicking a lingual site when only MGJ is selected).
         alert("No active charting sequence for this site with current modes.");
     }
   };
