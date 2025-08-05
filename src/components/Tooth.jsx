@@ -26,8 +26,21 @@ const Tooth = ({ toothId, surface, arch, toothData, onSiteClick, activeSite, isE
         return `${x},${y}`;
       }).join(' ');
   };
+
+  // Function to calculate the points for the pocket depth line
+  const getPocketLinePoints = (pdData, reData) => {
+    return siteKeys.map((site, index) => {
+        const pd = pdData[site] ?? 0;
+        const re = reData[site] ?? 0;
+        const x = index * SITE_WIDTH + SITE_WIDTH / 2;
+        // The pocket depth line starts from the recession line
+        const y = CEJ_Y + ((re + pd) * PIXELS_PER_MM * direction);
+        return `${x},${y}`;
+    }).join(' ');
+  };
   
   const recessionPoints = getLinePoints(toothData.re);
+  const pocketPoints = getPocketLinePoints(toothData.pd, toothData.re);
   const mgjValue = toothData.mgj.b;
   const mgjPoints = (surface === 'buccal' && mgjValue) ? `0,${CEJ_Y + (mgjValue * PIXELS_PER_MM * direction)} ${SVG_WIDTH},${CEJ_Y + (mgjValue * PIXELS_PER_MM * direction)}` : '';
 
@@ -51,16 +64,8 @@ const Tooth = ({ toothId, surface, arch, toothData, onSiteClick, activeSite, isE
             className="opacity-25"
           />
 
-          {/* Shading for probing depths >= 4mm */}
-          <g className="pd-shading">
-            {siteKeys.map((site, index) => {
-              const pd = toothData.pd[site] ?? 0; const re = toothData.re[site] ?? 0;
-              if (pd >= 4) {
-                const x = index * SITE_WIDTH; const reY = CEJ_Y + (re * PIXELS_PER_MM * direction); const pdHeight = pd * PIXELS_PER_MM * direction;
-                return (<rect key={`pd-${site}`} x={x} y={Math.min(reY, reY + pdHeight)} width={SITE_WIDTH} height={Math.abs(pdHeight)} fill="rgba(59, 130, 246, 0.3)" />);
-              } return null;
-            })}
-          </g>
+          {/* Pocket Depth Line (Blue) */}
+          <polyline points={pocketPoints} fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
 
           {/* Recession Line (Red) */}
           <polyline points={recessionPoints} fill="none" stroke="#EF4444" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
@@ -81,7 +86,7 @@ const Tooth = ({ toothId, surface, arch, toothData, onSiteClick, activeSite, isE
           <g className="interaction-layer">
             {siteKeys.map((site, index) => {
               const isActive = activeSite && activeSite.toothId === toothId && activeSite.surface === surface && activeSite.site === site;
-              return (<rect key={`interactive-${site}`} x={index * SITE_WIDTH} y="0" width={SVG_WIDTH} height={SVG_HEIGHT} fill="transparent" onClick={() => !isEditMode && onSiteClick(toothId, surface, site)}
+              return (<rect key={`interactive-${site}`} x={index * SITE_WIDTH} y="0" width={SITE_WIDTH} height={SVG_HEIGHT} fill="transparent" onClick={() => !isEditMode && onSiteClick(toothId, surface, site)}
                   className={`cursor-pointer transition-colors ${isActive ? 'fill-blue-500/20' : 'hover:fill-blue-500/10'}`} />)
             })}
           </g>
