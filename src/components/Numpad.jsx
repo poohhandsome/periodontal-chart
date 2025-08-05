@@ -44,10 +44,22 @@ const CustomInput = ({ title, onSave, onCancel }) => {
     )
 }
 
-const Numpad = ({ chartingInfo, mode, onInput, onBopSelect, onClose }) => {
+const Numpad = ({ chartingInfo, mode, chartingModes, onInput, onBopSelect, onClose }) => {
   const { toothId, surface, site, sites } = chartingInfo;
   const [bopSelection, setBopSelection] = useState([]);
   const [showCustomInput, setShowCustomInput] = useState(false);
+  // State for the BOP toggle when recording PD
+  const [bopToggled, setBopToggled] = useState(false);
+
+  const handleNumpadSelect = (value) => {
+    if (mode === 'pd' && chartingModes.bop) {
+      // If recording PD and BOP together, pass both values
+      onInput(value, bopToggled);
+    } else {
+      // Otherwise, just pass the numeric value
+      onInput(value);
+    }
+  };
 
   const toggleBop = (selectedSite) => {
     setBopSelection(prev => 
@@ -60,7 +72,7 @@ const Numpad = ({ chartingInfo, mode, onInput, onBopSelect, onClose }) => {
     switch (mode) {
       case 'pd':
         title = `Probing Depth (mm)`;
-        buttons = [1, 2, 3, 4, 5, 6, 7, 8, '+'];
+        buttons = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, '+'];
         break;
       case 're':
         title = 'Gingival Margin / Recession (mm)';
@@ -99,22 +111,35 @@ const Numpad = ({ chartingInfo, mode, onInput, onBopSelect, onClose }) => {
           Tooth {toothId} - {surface.charAt(0).toUpperCase()} - {site.toUpperCase()}
         </h3>
         <p className="text-gray-600 text-sm">{title}</p>
-        <div className="flex flex-wrap justify-center gap-2 mt-4">
-          {buttons.map((val) => (
-            <NumpadButton key={val} value={val}
-              onSelect={val === '+' ? () => setShowCustomInput(true) : onInput}
-              className={val === '+' ? 'text-blue-600 font-bold border-blue-400' : ''}
-            />
-          ))}
+        <div className="flex justify-center items-center gap-4 mt-4">
+          {/* Conditionally render the BOP toggle button */}
+          {mode === 'pd' && chartingModes.bop && (
+            <button
+              onClick={() => setBopToggled(!bopToggled)}
+              className={`w-24 h-12 rounded-md font-bold text-white transition-colors ${
+                bopToggled ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-400 hover:bg-gray-500'
+              }`}
+            >
+              BOP
+            </button>
+          )}
+          <div className="flex flex-wrap justify-center gap-2">
+            {buttons.map((val) => (
+              <NumpadButton key={val} value={val}
+                onSelect={val === '+' ? () => setShowCustomInput(true) : handleNumpadSelect}
+                className={val === '+' ? 'text-blue-600 font-bold border-blue-400' : ''}
+              />
+            ))}
+          </div>
         </div>
-        {showCustomInput && <CustomInput title={title} onSave={onInput} onCancel={() => setShowCustomInput(false)} />}
+        {showCustomInput && <CustomInput title={title} onSave={handleNumpadSelect} onCancel={() => setShowCustomInput(false)} />}
       </>
     );
   };
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-gray-100/80 backdrop-blur-sm border-t border-gray-200 p-4 z-50">
-      <div className="max-w-xl mx-auto text-center relative">
+      <div className="max-w-2xl mx-auto text-center relative">
         <button onClick={onClose} className="absolute top-0 right-0 text-gray-400 hover:text-gray-700 font-bold text-2xl leading-none">&times;</button>
         {renderContent()}
       </div>

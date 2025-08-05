@@ -5,7 +5,8 @@ import ToothChart from './components/ToothChart';
 import Numpad from './components/Numpad';
 import ChartSummary from './components/ChartSummary';
 import HistoryPanel from './components/HistoryPanel';
-import PatientInfo from './components/PatientInfo'; // <-- Import PatientInfo component
+import PatientInfo from './components/PatientInfo';
+import ChartingModeSelector from './components/ChartingModeSelector'; // Import the new component
 import { createChartingOrder, INITIAL_CHART_DATA } from './chart.config';
 
 export default function App() {
@@ -15,27 +16,25 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [patientHN, setPatientHN] = useState('');
   const [patientName, setPatientName] = useState('');
+  // State to manage which charting modes are active
+  const [chartingModes, setChartingModes] = useState({
+    pd: true,
+    re: true,
+    bop: true,
+    mgj: true,
+  });
 
-  // Load and clean history from localStorage when the app starts
   useEffect(() => {
     const savedHistory = localStorage.getItem('periodontalChartHistory');
     if (savedHistory) {
       const parsedHistory = JSON.parse(savedHistory);
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-      // Filter out charts older than 7 days
-      const stillValidHistory = parsedHistory.filter(item => {
-        const itemDate = new Date(item.date);
-        return itemDate > sevenDaysAgo;
-      });
-
+      const stillValidHistory = parsedHistory.filter(item => new Date(item.date) > sevenDaysAgo);
       setHistory(stillValidHistory);
-
-      // If any charts were removed, update localStorage and notify the user
       if (stillValidHistory.length < parsedHistory.length) {
         localStorage.setItem('periodontalChartHistory', JSON.stringify(stillValidHistory));
-        alert(`${parsedHistory.length - stillValidHistory.length} expired chart(s) have been removed.`);
+        alert(`${parsedHistory.length - parsedHistory.length} expired chart(s) have been removed.`);
       }
     }
   }, []);
@@ -53,46 +52,84 @@ export default function App() {
     return { ...surfaceInfo, site };
   }, [chartingState, CHARTING_ORDER]);
   
+  const handleModeChange = (event) => {
+    const { value, checked } = event.target;
+    setChartingModes(prev => ({ ...prev, [value]: checked }));
+  };
+
   const toggleMissingTooth = (toothId) => {
     setMissingTeeth(prev => prev.includes(toothId) ? prev.filter(t => t !== toothId) : [...prev, toothId]);
   };
+
   const handleToothClick = (toothId, surface, site) => {
-    if (isEditMode) toggleMissingTooth(toothId);
-    else {
-      const orderIndex = CHARTING_ORDER.findIndex(item => item.toothId === toothId && item.surface === surface);
-      if (orderIndex !== -1) {
-        const siteIndex = CHARTING_ORDER[orderIndex].sites.indexOf(site);
-        setChartingState({ isActive: true, orderIndex, siteIndex, mode: 'pd' });
+    if (isEditMode) {
+      toggleMissingTooth(toothId);
+      return;
+    }
+    const orderIndex = CHARTING_ORDER.findIndex(item => item.toothId === toothId && item.surface === surface);
+    if (orderIndex !== -1) {
+      const siteIndex = CHARTING_ORDER[orderIndex].sites.indexOf(site);
+      // Find the first active mode to start with
+      const firstActiveMode = Object.keys(chartingModes).find(m => chartingModes[m]);
+      if (firstActiveMode) {
+        setChartingState({ isActive: true, orderIndex, siteIndex, mode: firstActiveMode });
+      } else {
+        alert("Please select at least one charting mode.");
       }
     }
   };
+
   const stopCharting = () => setChartingState({ ...chartingState, isActive: false });
+
   const advanceState = () => {
     let { orderIndex, siteIndex, mode } = { ...chartingState };
-    if (!CHARTING_ORDER[orderIndex]) { stopCharting(); return; }
     const surfaceInfo = CHARTING_ORDER[orderIndex];
-    if (mode === 'pd') mode = 're';
-    else if (mode === 're') {
-      if (siteIndex < surfaceInfo.sites.length - 1) { siteIndex++; mode = 'pd'; } else { mode = 'bop'; }
-    } else if (mode === 'bop') {
-      if (surfaceInfo.surface === 'buccal') mode = 'mgj';
-      else { orderIndex++; siteIndex = 0; mode = 'pd'; }
-    } else if (mode === 'mgj') { orderIndex++; siteIndex = 0; mode = 'pd'; }
-    if (orderIndex >= CHARTING_ORDER.length) { stopCharting(); } else {
+    
+    // Define the sequence of modes based on what's checked
+    const modeSequence = ['pd', 're', 'bop', 'mgj'].filter(m => chartingModes[m]);
+    const currentModeIndex = modeSequence.indexOf(mode);
+    
+    if (currentModeIndex < modeSequence.length - 1) {
+      // Go to the next selected mode for the current site
+      mode = modeSequence[currentModeIndex + 1];
+    } else {
+      // Move to the next site or tooth
+      if (siteIndex < surfaceInfo.sites.length - 1) {
+        siteIndex++;
+      } else {
+        orderIndex++;
+        siteIndex = 0;
+      }
+      // Start with the first selected mode for the new site/tooth
+      mode = modeSequence[0];
+    }
+
+    if (orderIndex >= CHARTING_ORDER.length || !mode) {
+      stopCharting();
+    } else {
       setChartingState({ isActive: true, orderIndex, siteIndex, mode });
     }
   };
-  const handleNumpadInput = (value) => {
+
+  const handleNumpadInput = (value, bopValue = null) => {
     const { toothId, site } = activeChartingInfo;
     setChartData((prev) => {
       const newData = JSON.parse(JSON.stringify(prev));
-      if (chartingState.mode === 'pd') newData[toothId].pd[site] = value;
-      else if (chartingState.mode === 're') newData[toothId].re[site] = value;
-      else if (chartingState.mode === 'mgj') newData[toothId].mgj.b = value;
+      if (chartingState.mode === 'pd') {
+        newData[toothId].pd[site] = value;
+        if (bopValue !== null) {
+          newData[toothId].bleeding[site] = bopValue;
+        }
+      } else if (chartingState.mode === 're') {
+        newData[toothId].re[site] = value;
+      } else if (chartingState.mode === 'mgj') {
+        newData[toothId].mgj.b = value;
+      }
       return newData;
     });
     advanceState();
   };
+
   const handleBopInput = (bopSites) => {
     const { toothId, sites } = activeChartingInfo;
     setChartData((prev) => {
@@ -107,14 +144,12 @@ export default function App() {
   const handleSaveChart = () => {
     const newHistoryEntry = {
       id: Date.now(),
-      date: new Date().toISOString(), // This timestamp is used for the 7-day countdown
+      date: new Date().toISOString(),
       chartData: chartData,
       missingTeeth: missingTeeth,
       patientHN: patientHN,
       patientName: patientName,
     };
-
-    // Always adds a new entry, giving it a fresh 7-day timer
     const updatedHistory = [newHistoryEntry, ...history];
     setHistory(updatedHistory);
     localStorage.setItem('periodontalChartHistory', JSON.stringify(updatedHistory));
@@ -141,12 +176,7 @@ export default function App() {
   };
 
   const handleDownload = () => {
-    const dataToSave = {
-      patientHN,
-      patientName,
-      chartData,
-      missingTeeth,
-    };
+    const dataToSave = { patientHN, patientName, chartData, missingTeeth };
     const blob = new Blob([JSON.stringify(dataToSave, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -189,24 +219,13 @@ export default function App() {
         <div className="flex justify-between items-center mb-4">
             <h1 className="text-3xl font-bold text-blue-700">Periodontal Chart</h1>
             <div className="space-x-2 flex items-center">
-                <button
-                    onClick={() => setIsEditMode(!isEditMode)}
-                    className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors h-10 ${
-                        isEditMode ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-500 hover:bg-gray-600'
-                    }`}
-                >
+                <button onClick={() => setIsEditMode(!isEditMode)} className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors h-10 ${isEditMode ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-500 hover:bg-gray-600'}`}>
                     {isEditMode ? 'Finish Editing' : 'Remove Teeth'}
                 </button>
-                 <button
-                    onClick={handleSaveChart}
-                    className="px-4 py-2 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors h-10"
-                >
+                 <button onClick={handleSaveChart} className="px-4 py-2 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors h-10">
                     Save Chart
                 </button>
-                <button
-                    onClick={handleDownload}
-                    className="px-4 py-2 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors h-10"
-                >
+                <button onClick={handleDownload} className="px-4 py-2 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors h-10">
                     Download
                 </button>
                 <label className="px-4 py-2 rounded-lg font-semibold text-white bg-purple-600 hover:bg-purple-700 transition-colors cursor-pointer h-10 flex items-center">
@@ -216,20 +235,11 @@ export default function App() {
             </div>
         </div>
         
-        <PatientInfo 
-            patientHN={patientHN} 
-            setPatientHN={setPatientHN} 
-            patientName={patientName} 
-            setPatientName={setPatientName} 
-        />
+        <PatientInfo patientHN={patientHN} setPatientHN={setPatientHN} patientName={patientName} setPatientName={setPatientName} />
+        
+        <ChartingModeSelector modes={chartingModes} onModeChange={handleModeChange} />
 
-        <ToothChart
-            data={chartData}
-            onSiteClick={handleToothClick}
-            activeSite={activeChartingInfo}
-            missingTeeth={missingTeeth}
-            isEditMode={isEditMode}
-        />
+        <ToothChart data={chartData} onSiteClick={handleToothClick} activeSite={activeChartingInfo} missingTeeth={missingTeeth} isEditMode={isEditMode} />
 
         <ChartSummary chartData={chartData} missingTeeth={missingTeeth} />
 
@@ -241,6 +251,7 @@ export default function App() {
           key={`${chartingState.orderIndex}-${chartingState.siteIndex}-${chartingState.mode}`}
           chartingInfo={activeChartingInfo}
           mode={chartingState.mode}
+          chartingModes={chartingModes} // Pass modes to Numpad
           onInput={handleNumpadInput}
           onBopSelect={handleBopInput}
           onClose={stopCharting}
