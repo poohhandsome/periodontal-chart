@@ -1,15 +1,20 @@
+// src/App.jsx
+
 import React, { useState, useMemo, useEffect } from 'react';
 import ToothChart from './components/ToothChart';
 import Numpad from './components/Numpad';
 import ChartSummary from './components/ChartSummary';
-import HistoryPanel from './components/HistoryPanel'; // <-- Import new component
+import HistoryPanel from './components/HistoryPanel';
+import PatientInfo from './components/PatientInfo'; // <-- Import new component
 import { createChartingOrder, INITIAL_CHART_DATA } from './chart.config';
 
 export default function App() {
   const [chartData, setChartData] = useState(INITIAL_CHART_DATA);
   const [missingTeeth, setMissingTeeth] = useState([]);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [history, setHistory] = useState([]); // <-- New state for history
+  const [history, setHistory] = useState([]);
+  const [patientHN, setPatientHN] = useState(''); // <-- New state for Patient HN
+  const [patientName, setPatientName] = useState(''); // <-- New state for Patient Name
 
   // Load history from localStorage when the app starts
   useEffect(() => {
@@ -92,6 +97,8 @@ export default function App() {
       date: new Date().toISOString(),
       chartData: chartData,
       missingTeeth: missingTeeth,
+      patientHN: patientHN,
+      patientName: patientName,
     };
 
     const updatedHistory = [newHistoryEntry, ...history];
@@ -105,6 +112,8 @@ export default function App() {
     if (chartToLoad) {
       setChartData(chartToLoad.chartData);
       setMissingTeeth(chartToLoad.missingTeeth);
+      setPatientHN(chartToLoad.patientHN || '');
+      setPatientName(chartToLoad.patientName || '');
       alert(`Chart from ${new Date(chartToLoad.date).toLocaleString()} loaded.`);
     }
   };
@@ -117,18 +126,21 @@ export default function App() {
     }
   };
 
-  // --- New functions for download/upload ---
+  // --- Updated download/upload functions ---
 
   const handleDownload = () => {
     const dataToSave = {
+      patientHN,
+      patientName,
       chartData,
       missingTeeth,
     };
     const blob = new Blob([JSON.stringify(dataToSave, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
+    const fileName = `${patientHN || 'NoHN'}-${patientName || 'NoName'}-PeriodontalChart.json`;
     a.href = url;
-    a.download = `periodontal-chart-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -145,6 +157,8 @@ export default function App() {
           if (loadedData.chartData && loadedData.missingTeeth) {
             setChartData(loadedData.chartData);
             setMissingTeeth(loadedData.missingTeeth);
+            setPatientHN(loadedData.patientHN || '');
+            setPatientName(loadedData.patientName || '');
             alert('Chart data loaded successfully!');
           } else {
             alert('Invalid chart file format.');
@@ -162,10 +176,10 @@ export default function App() {
       <div className="w-full mx-auto px-2 sm:px-4 md:px-6 pb-64">
         <div className="flex justify-between items-center mb-4">
             <h1 className="text-3xl font-bold text-blue-700">Periodontal Chart</h1>
-            <div className="space-x-2">
+            <div className="space-x-2 flex items-center">
                 <button
                     onClick={() => setIsEditMode(!isEditMode)}
-                    className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors ${
+                    className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors h-10 ${
                         isEditMode ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-500 hover:bg-gray-600'
                     }`}
                 >
@@ -173,22 +187,29 @@ export default function App() {
                 </button>
                  <button
                     onClick={handleSaveChart}
-                    className="px-4 py-2 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                    className="px-4 py-2 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors h-10"
                 >
                     Save Chart
                 </button>
                 <button
                     onClick={handleDownload}
-                    className="px-4 py-2 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors"
+                    className="px-4 py-2 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors h-10"
                 >
                     Download
                 </button>
-                <label className="px-4 py-2 rounded-lg font-semibold text-white bg-purple-600 hover:bg-purple-700 transition-colors cursor-pointer">
+                <label className="px-4 py-2 rounded-lg font-semibold text-white bg-purple-600 hover:bg-purple-700 transition-colors cursor-pointer h-10 flex items-center">
                     Upload
                     <input type="file" accept=".json" className="hidden" onChange={handleUpload} />
                 </label>
             </div>
         </div>
+        
+        <PatientInfo 
+            patientHN={patientHN} 
+            setPatientHN={setPatientHN} 
+            patientName={patientName} 
+            setPatientName={setPatientName} 
+        />
 
         <ToothChart
             data={chartData}
@@ -200,7 +221,6 @@ export default function App() {
 
         <ChartSummary chartData={chartData} missingTeeth={missingTeeth} />
 
-        {/* --- New History Panel --- */}
         <HistoryPanel history={history} onLoad={handleLoadChart} onDelete={handleDeleteChart} />
       </div>
 
