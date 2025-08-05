@@ -10,6 +10,14 @@ export const ALL_TEETH = [...UPPER_RIGHT, ...UPPER_LEFT, ...LOWER_RIGHT.slice().
 const BUCCAL_SITES = ['db', 'b', 'mb'];
 const LINGUAL_SITES = ['dl', 'l', 'ml'];
 
+// Re-added the missing INITIAL_CHART_DATA export
+export const INITIAL_CHART_DATA = ALL_TEETH.reduce((acc, toothId) => {
+  acc[toothId] = {
+    pd: {}, re: {}, mgj: { b: null, l: null }, bleeding: {}, suppuration: {},
+  };
+  return acc;
+}, {});
+
 export const createChartingOrder = (missingTeeth = []) => {
   const order = [];
   const availableTeeth = (teeth) => teeth.filter(t => !missingTeeth.includes(t));
