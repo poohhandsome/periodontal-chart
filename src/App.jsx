@@ -7,7 +7,19 @@ import ChartSummary from './components/ChartSummary';
 import HistoryPanel from './components/HistoryPanel';
 import PatientInfo from './components/PatientInfo';
 import ChartingModeSelector from './components/ChartingModeSelector';
+import SequenceCustomizer from './components/SequenceCustomizer'; // Import the new component
 import { createChartingOrder, INITIAL_CHART_DATA } from './chart.config';
+
+const DEFAULT_SEQUENCE = [
+    { id: 'Q1B', label: 'Q1 Buccal', direction: 'LR' },
+    { id: 'Q2B', label: 'Q2 Buccal', direction: 'LR' },
+    { id: 'Q2L', label: 'Q2 Lingual', direction: 'RL' },
+    { id: 'Q1L', label: 'Q1 Lingual', direction: 'RL' },
+    { id: 'Q3L', label: 'Q3 Lingual', direction: 'RL' },
+    { id: 'Q4L', label: 'Q4 Lingual', direction: 'LR' },
+    { id: 'Q4B', label: 'Q4 Buccal', direction: 'LR' },
+    { id: 'Q3B', label: 'Q3 Buccal', direction: 'RL' },
+];
 
 export default function App() {
   const [chartData, setChartData] = useState(INITIAL_CHART_DATA);
@@ -22,8 +34,16 @@ export default function App() {
     bop: true,
     mgj: true,
   });
+  const [customSequence, setCustomSequence] = useState(DEFAULT_SEQUENCE);
+  const [showCustomizer, setShowCustomizer] = useState(false);
 
   useEffect(() => {
+    // Load saved sequence from localStorage
+    const savedSequence = localStorage.getItem('periodontalChartSequence');
+    if (savedSequence) {
+        setCustomSequence(JSON.parse(savedSequence));
+    }
+    
     const savedHistory = localStorage.getItem('periodontalChartHistory');
     if (savedHistory) {
       const parsedHistory = JSON.parse(savedHistory);
@@ -37,8 +57,13 @@ export default function App() {
       }
     }
   }, []);
+  
+  const handleSequenceChange = (newSequence) => {
+      setCustomSequence(newSequence);
+      localStorage.setItem('periodontalChartSequence', JSON.stringify(newSequence));
+  };
 
-  const CHARTING_ORDER = useMemo(() => createChartingOrder(missingTeeth, chartingModes), [missingTeeth, chartingModes]);
+  const CHARTING_ORDER = useMemo(() => createChartingOrder(missingTeeth, chartingModes, customSequence), [missingTeeth, chartingModes, customSequence]);
   
   const [chartingState, setChartingState] = useState({
     isActive: false, 
@@ -65,14 +90,10 @@ export default function App() {
       return;
     }
     
-    // **FIX for BOP/MGJ only modes**: The logic is now more robust.
-    // 1. Try to find a direct match for the site clicked (works for PD/RE).
     let orderIndex = CHARTING_ORDER.findIndex(item => 
         item.toothId === toothId && item.surface === surface && item.site === site
     );
     
-    // 2. If no direct match, find the first available action for that tooth surface.
-    // This correctly finds the BOP or MGJ step when they are the only modes selected.
     if (orderIndex === -1) {
         orderIndex = CHARTING_ORDER.findIndex(item => 
             item.toothId === toothId && item.surface === surface
@@ -125,7 +146,6 @@ export default function App() {
     advanceState();
   };
 
-  // ... (handleSaveChart, handleLoadChart, handleDeleteChart, etc. are unchanged)
   const handleSaveChart = () => {
     const newHistoryEntry = {
       id: Date.now(),
@@ -204,6 +224,12 @@ export default function App() {
         <div className="flex justify-between items-center mb-4">
             <h1 className="text-3xl font-bold text-blue-700">Periodontal Chart</h1>
             <div className="space-x-2 flex items-center">
+                <button 
+                    onClick={() => setShowCustomizer(true)}
+                    className="px-4 py-2 rounded-lg font-semibold text-white bg-gray-700 hover:bg-gray-800 transition-colors h-10"
+                >
+                    Customize Flow
+                </button>
                 <button onClick={() => setIsEditMode(!isEditMode)} className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors h-10 ${isEditMode ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-500 hover:bg-gray-600'}`}>
                     {isEditMode ? 'Finish Editing' : 'Remove Teeth'}
                 </button>
@@ -230,6 +256,14 @@ export default function App() {
 
         <HistoryPanel history={history} onLoad={handleLoadChart} onDelete={handleDeleteChart} />
       </div>
+
+      {showCustomizer && (
+          <SequenceCustomizer 
+            sequence={customSequence}
+            onSequenceChange={handleSequenceChange}
+            onClose={() => setShowCustomizer(false)}
+          />
+      )}
 
       {chartingState.isActive && activeChartingInfo && (
         <Numpad

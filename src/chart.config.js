@@ -7,8 +7,10 @@ export const LOWER_LEFT = [31, 32, 33, 34, 35, 36, 37, 38];
 
 export const ALL_TEETH = [...UPPER_RIGHT, ...UPPER_LEFT, ...LOWER_RIGHT.slice().reverse(), ...LOWER_LEFT];
 
-const BUCCAL_SITES = ['db', 'b', 'mb'];
-const LINGUAL_SITES = ['dl', 'l', 'ml'];
+const BUCCAL_SITES_LR = ['db', 'b', 'mb'];
+const LINGUAL_SITES_LR = ['dl', 'l', 'ml'];
+const BUCCAL_SITES_RL = ['mb', 'b', 'db'];
+const LINGUAL_SITES_RL = ['ml', 'l', 'dl'];
 
 export const INITIAL_CHART_DATA = ALL_TEETH.reduce((acc, toothId) => {
   acc[toothId] = {
@@ -17,37 +19,48 @@ export const INITIAL_CHART_DATA = ALL_TEETH.reduce((acc, toothId) => {
   return acc;
 }, {});
 
-export const createChartingOrder = (missingTeeth = [], modes = { pd: true, re: true, bop: true, mgj: true }) => {
+// Maps sequence IDs to their corresponding tooth arrays and surfaces.
+const SEQUENCE_MAP = {
+    Q1B: { teeth: UPPER_RIGHT, surface: 'buccal' },
+    Q1L: { teeth: UPPER_RIGHT, surface: 'lingual' },
+    Q2B: { teeth: UPPER_LEFT, surface: 'buccal' },
+    Q2L: { teeth: UPPER_LEFT, surface: 'lingual' },
+    Q3B: { teeth: LOWER_LEFT, surface: 'buccal' },
+    Q3L: { teeth: LOWER_LEFT, surface: 'lingual' },
+    Q4B: { teeth: LOWER_RIGHT, surface: 'buccal' },
+    Q4L: { teeth: LOWER_RIGHT, surface: 'lingual' },
+};
+
+export const createChartingOrder = (missingTeeth = [], modes = {}, customSequence = []) => {
   const order = [];
   const availableTeeth = (teeth) => teeth.filter(t => !missingTeeth.includes(t));
-
   const siteModes = ['pd', 're'].filter(m => modes[m]);
 
-  // A more standard full-arch "snake" sequence
-  const archSequence = [
-    { teeth: availableTeeth([...UPPER_RIGHT, ...UPPER_LEFT]), surface: 'buccal' }, // 18 -> 28
-    { teeth: availableTeeth([...UPPER_LEFT.slice().reverse(), ...UPPER_RIGHT.slice().reverse()]), surface: 'lingual' }, // 28 -> 18
-    { teeth: availableTeeth([...LOWER_LEFT.slice().reverse(), ...LOWER_RIGHT.slice().reverse()]), surface: 'lingual' }, // 38 -> 48
-    { teeth: availableTeeth([...LOWER_RIGHT, ...LOWER_LEFT]), surface: 'buccal' }, // 48 -> 38
-  ];
-
-  archSequence.forEach(({ teeth, surface }) => {
-    const sites = surface === 'buccal' ? BUCCAL_SITES : LINGUAL_SITES;
+  customSequence.forEach(segment => {
+    const { teeth: baseTeeth, surface } = SEQUENCE_MAP[segment.id];
     
+    // Determine the direction for teeth and sites
+    const isReversed = segment.direction === 'RL';
+    const teeth = availableTeeth(isReversed ? [...baseTeeth].reverse() : baseTeeth);
+    
+    let sites;
+    if (surface === 'buccal') {
+        sites = isReversed ? BUCCAL_SITES_RL : BUCCAL_SITES_LR;
+    } else {
+        sites = isReversed ? LINGUAL_SITES_RL : LINGUAL_SITES_LR;
+    }
+
     teeth.forEach(toothId => {
-      // Add site-specific measurements (PD, RE) for each site of the tooth.
       sites.forEach(site => {
         siteModes.forEach(mode => {
           order.push({ toothId, surface, site, type: mode });
         });
       });
 
-      // After all sites for a single tooth are done, add its BOP step if selected.
       if (modes.bop) {
         order.push({ toothId, surface, sites, type: 'bop' });
       }
 
-      // After the BOP step, add its MGJ step if it's a buccal surface and MGJ is selected.
       if (modes.mgj && surface === 'buccal') {
         order.push({ toothId, surface, site: 'b', type: 'mgj' });
       }
