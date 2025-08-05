@@ -28,8 +28,17 @@ const Tooth = ({ toothId, surface, arch, toothData, onSiteClick, activeSite, isE
   };
   
   const recessionPoints = getLinePoints(toothData.re);
+  
+  // --- CORRECTED MGJ LOGIC ---
+  // The MGJ line is now calculated relative to the gingival margin (recession line).
   const mgjValue = toothData.mgj.b;
-  const mgjPoints = (surface === 'buccal' && mgjValue) ? `0,${CEJ_Y + (mgjValue * PIXELS_PER_MM * direction)} ${SVG_WIDTH},${CEJ_Y + (mgjValue * PIXELS_PER_MM * direction)}` : '';
+  const centralRecession = toothData.re['b'] ?? 0; // Get the central recession value for the buccal surface
+  let mgjPoints = '';
+  if (surface === 'buccal' && mgjValue) {
+      const mgj_Y = CEJ_Y + ((centralRecession + mgjValue) * PIXELS_PER_MM * direction);
+      mgjPoints = `0,${mgj_Y} ${SVG_WIDTH},${mgj_Y}`;
+  }
+  // --- END OF CORRECTION ---
 
   const editModeClass = isEditMode ? 'relative after:absolute after:inset-0 after:bg-red-500/20 after:cursor-pointer' : '';
 
@@ -56,7 +65,9 @@ const Tooth = ({ toothId, surface, arch, toothData, onSiteClick, activeSite, isE
             {siteKeys.map((site, index) => {
               const pd = toothData.pd[site] ?? 0;
               const re = toothData.re[site] ?? 0;
-              if (pd > 0) {
+              // --- CORRECTED POCKET DEPTH VISIBILITY ---
+              // The blue line will only show if the pocket depth is 4mm or greater.
+              if (pd >= 4) {
                 const x = index * SITE_WIDTH + SITE_WIDTH / 2;
                 const startY = CEJ_Y + (re * PIXELS_PER_MM * direction);
                 const endY = startY + (pd * PIXELS_PER_MM * direction);
@@ -73,6 +84,7 @@ const Tooth = ({ toothId, surface, arch, toothData, onSiteClick, activeSite, isE
                   />
                 );
               }
+              // --- END OF CORRECTION ---
               return null;
             })}
           </g>
@@ -96,7 +108,7 @@ const Tooth = ({ toothId, surface, arch, toothData, onSiteClick, activeSite, isE
           <g className="interaction-layer">
             {siteKeys.map((site, index) => {
               const isActive = activeSite && activeSite.toothId === toothId && activeSite.surface === surface && activeSite.site === site;
-              return (<rect key={`interactive-${site}`} x={index * SITE_WIDTH} y="0" width={SITE_WIDTH} height={SVG_HEIGHT} fill="transparent" onClick={() => !isEditMode && onSiteClick(toothId, surface, site)}
+              return (<rect key={`interactive-${site}`} x={index * SITE_WIDTH} y="0" width={SVG_WIDTH} height={SVG_HEIGHT} fill="transparent" onClick={() => !isEditMode && onSiteClick(toothId, surface, site)}
                   className={`cursor-pointer transition-colors ${isActive ? 'fill-blue-500/20' : 'hover:fill-blue-500/10'}`} />)
             })}
           </g>
