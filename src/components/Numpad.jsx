@@ -44,55 +44,60 @@ const CustomInput = ({ title, onSave, onCancel }) => {
     )
 }
 
-const Numpad = ({ chartingInfo, mode, chartingModes, onInput, onBopSelect, onClose }) => {
-  const { toothId, surface, site, sites } = chartingInfo;
+const Numpad = ({ chartingInfo, onInput, onBopSelect, onClose }) => {
+  const { toothId, surface, site, sites, type, teeth } = chartingInfo;
   const [bopSelection, setBopSelection] = useState([]);
   const [showCustomInput, setShowCustomInput] = useState(false);
-  // State for the BOP toggle when recording PD
-  const [bopToggled, setBopToggled] = useState(false);
 
-  const handleNumpadSelect = (value) => {
-    if (mode === 'pd' && chartingModes.bop) {
-      // If recording PD and BOP together, pass both values
-      onInput(value, bopToggled);
-    } else {
-      // Otherwise, just pass the numeric value
-      onInput(value);
-    }
-  };
-
-  const toggleBop = (selectedSite) => {
+  // For BOP, we allow selecting bleeding sites for the entire surface at once.
+  const toggleBop = (toothIdentifier, siteIdentifier) => {
+    const key = `${toothIdentifier}-${siteIdentifier}`;
     setBopSelection(prev => 
-      prev.includes(selectedSite) ? prev.filter(s => s !== selectedSite) : [...prev, selectedSite]
+      prev.includes(key) ? prev.filter(s => s !== key) : [...prev, key]
     );
   };
   
   const renderContent = () => {
-    let title, buttons;
-    switch (mode) {
+    let title, buttons, infoText;
+    
+    switch (type) {
       case 'pd':
         title = `Probing Depth (mm)`;
+        infoText = `Tooth ${toothId} - ${surface.charAt(0).toUpperCase()} - ${site.toUpperCase()}`;
         buttons = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, '+'];
         break;
       case 're':
         title = 'Gingival Margin / Recession (mm)';
+        infoText = `Tooth ${toothId} - ${surface.charAt(0).toUpperCase()} - ${site.toUpperCase()}`;
         buttons = [-3, -2, -1, 0, 1, 2, 3, 4, 5, '+'];
         break;
       case 'mgj':
         title = 'Mucogingival Junction (mm)';
+        infoText = `Surface: ${surface.toUpperCase()} - Center`;
         buttons = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, '+'];
         break;
       case 'bop':
+        // The BOP screen is now for the entire surface.
         return (
           <>
             <h3 className="font-bold text-blue-700 text-lg">Bleeding on Probing?</h3>
-            <p className="text-gray-600 text-sm">Select bleeding sites for Tooth {toothId} - {surface}</p>
-            <div className="flex justify-center gap-3 mt-4">
-                {sites.map(s => (
-                    <button key={s} onClick={() => toggleBop(s)}
-                        className={`w-20 h-12 rounded uppercase font-bold text-white transition-colors ${bopSelection.includes(s) ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-400 hover:bg-gray-500'}`}>
-                        {s}
-                    </button>
+            <p className="text-gray-600 text-sm">Select bleeding sites for surface: {surface.toUpperCase()}</p>
+            <div className="flex flex-wrap justify-center gap-2 mt-4">
+                {teeth.map(tId => (
+                    <div key={tId} className="flex flex-col items-center gap-1 p-2 bg-gray-100 rounded-md">
+                        <span className="text-sm font-bold">{tId}</span>
+                        <div className="flex gap-1">
+                        {sites.map(s => {
+                            const key = `${tId}-${s}`;
+                            return (
+                                <button key={key} onClick={() => toggleBop(tId, s)}
+                                    className={`w-10 h-8 text-xs rounded uppercase font-bold text-white transition-colors ${bopSelection.includes(key) ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-400 hover:bg-gray-500'}`}>
+                                    {s}
+                                </button>
+                            )
+                        })}
+                        </div>
+                    </div>
                 ))}
             </div>
             <div className="mt-4 flex justify-center">
@@ -107,39 +112,26 @@ const Numpad = ({ chartingInfo, mode, chartingModes, onInput, onBopSelect, onClo
 
     return (
       <>
-        <h3 className="font-bold text-blue-700 text-lg">
-          Tooth {toothId} - {surface.charAt(0).toUpperCase()} - {site.toUpperCase()}
-        </h3>
+        <h3 className="font-bold text-blue-700 text-lg">{infoText}</h3>
         <p className="text-gray-600 text-sm">{title}</p>
         <div className="flex justify-center items-center gap-4 mt-4">
-          {/* Conditionally render the BOP toggle button */}
-          {mode === 'pd' && chartingModes.bop && (
-            <button
-              onClick={() => setBopToggled(!bopToggled)}
-              className={`w-24 h-12 rounded-md font-bold text-white transition-colors ${
-                bopToggled ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-400 hover:bg-gray-500'
-              }`}
-            >
-              BOP
-            </button>
-          )}
           <div className="flex flex-wrap justify-center gap-2">
             {buttons.map((val) => (
               <NumpadButton key={val} value={val}
-                onSelect={val === '+' ? () => setShowCustomInput(true) : handleNumpadSelect}
+                onSelect={val === '+' ? () => setShowCustomInput(true) : onInput}
                 className={val === '+' ? 'text-blue-600 font-bold border-blue-400' : ''}
               />
             ))}
           </div>
         </div>
-        {showCustomInput && <CustomInput title={title} onSave={handleNumpadSelect} onCancel={() => setShowCustomInput(false)} />}
+        {showCustomInput && <CustomInput title={title} onSave={onInput} onCancel={() => setShowCustomInput(false)} />}
       </>
     );
   };
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-gray-100/80 backdrop-blur-sm border-t border-gray-200 p-4 z-50">
-      <div className="max-w-2xl mx-auto text-center relative">
+      <div className="max-w-4xl mx-auto text-center relative">
         <button onClick={onClose} className="absolute top-0 right-0 text-gray-400 hover:text-gray-700 font-bold text-2xl leading-none">&times;</button>
         {renderContent()}
       </div>

@@ -10,7 +10,6 @@ export const ALL_TEETH = [...UPPER_RIGHT, ...UPPER_LEFT, ...LOWER_RIGHT.slice().
 const BUCCAL_SITES = ['db', 'b', 'mb'];
 const LINGUAL_SITES = ['dl', 'l', 'ml'];
 
-// Re-added the missing INITIAL_CHART_DATA export
 export const INITIAL_CHART_DATA = ALL_TEETH.reduce((acc, toothId) => {
   acc[toothId] = {
     pd: {}, re: {}, mgj: { b: null, l: null }, bleeding: {}, suppuration: {},
@@ -18,32 +17,51 @@ export const INITIAL_CHART_DATA = ALL_TEETH.reduce((acc, toothId) => {
   return acc;
 }, {});
 
-export const createChartingOrder = (missingTeeth = []) => {
+export const createChartingOrder = (missingTeeth = [], modes = { pd: true, re: true, bop: true, mgj: true }) => {
   const order = [];
   const availableTeeth = (teeth) => teeth.filter(t => !missingTeeth.includes(t));
 
-  // This sequence defines the new charting order, completing one quadrant at a time.
-  const sequence = [
-    // Quadrant 1
-    { teeth: availableTeeth(UPPER_RIGHT), surface: 'buccal' }, // 18 -> 11
-    { teeth: availableTeeth(UPPER_RIGHT.slice().reverse()), surface: 'lingual' }, // 11 -> 18
-    // Quadrant 2
-    { teeth: availableTeeth(UPPER_LEFT), surface: 'buccal' }, // 21 -> 28
-    { teeth: availableTeeth(UPPER_LEFT.slice().reverse()), surface: 'lingual' }, // 28 -> 21
-    // Quadrant 3
-    { teeth: availableTeeth(LOWER_LEFT.slice().reverse()), surface: 'lingual' }, // 38 -> 31
-    { teeth: availableTeeth(LOWER_LEFT), surface: 'buccal' }, // 31 -> 38
-    // Quadrant 4
-    { teeth: availableTeeth(LOWER_RIGHT), surface: 'lingual' }, // 48 -> 41
-    { teeth: availableTeeth(LOWER_RIGHT.slice().reverse()), surface: 'buccal' }, // 41 -> 48
+  // Defines the sequence of modes to be recorded for each site.
+  const siteModes = ['pd', 're'].filter(m => modes[m]);
+
+  const archSequence = [
+    // Q1
+    { teeth: availableTeeth(UPPER_RIGHT), surface: 'buccal' },
+    { teeth: availableTeeth(UPPER_RIGHT.slice().reverse()), surface: 'lingual' },
+    // Q2
+    { teeth: availableTeeth(UPPER_LEFT), surface: 'buccal' },
+    { teeth: availableTeeth(UPPER_LEFT.slice().reverse()), surface: 'lingual' },
+    // Q3
+    { teeth: availableTeeth(LOWER_LEFT.slice().reverse()), surface: 'lingual' },
+    { teeth: availableTeeth(LOWER_LEFT), surface: 'buccal' },
+    // Q4
+    { teeth: availableTeeth(LOWER_RIGHT), surface: 'lingual' },
+    { teeth: availableTeeth(LOWER_RIGHT.slice().reverse()), surface: 'buccal' },
   ];
 
-  sequence.forEach(({ teeth, surface }) => {
+  archSequence.forEach(({ teeth, surface }) => {
+    const sites = surface === 'buccal' ? BUCCAL_SITES : LINGUAL_SITES;
+
+    // Add site-specific measurements (PD, RE) for each tooth.
     teeth.forEach(toothId => {
-      order.push({
-        toothId, surface, sites: surface === 'buccal' ? BUCCAL_SITES : LINGUAL_SITES
+      sites.forEach(site => {
+        siteModes.forEach(mode => {
+          order.push({ toothId, surface, site, type: mode });
+        });
       });
     });
+
+    // After all sites on a surface are done, add a single BOP step if selected.
+    if (modes.bop && teeth.length > 0) {
+      // We use the first tooth as a representative for the surface.
+      order.push({ toothId: teeth[0], surface, sites, type: 'bop' });
+    }
+
+    // Finally, add a single MGJ step for the buccal surface if selected.
+    if (modes.mgj && surface === 'buccal' && teeth.length > 0) {
+      // MGJ is recorded for the central buccal site 'b'.
+      order.push({ toothId: teeth[0], surface, site: 'b', type: 'mgj' });
+    }
   });
 
   return order;
