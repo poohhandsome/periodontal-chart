@@ -45,15 +45,13 @@ const CustomInput = ({ title, onSave, onCancel }) => {
 }
 
 const Numpad = ({ chartingInfo, onInput, onBopSelect, onClose }) => {
-  const { toothId, surface, site, sites, type, teeth } = chartingInfo;
+  const { toothId, surface, site, sites, type } = chartingInfo;
   const [bopSelection, setBopSelection] = useState([]);
   const [showCustomInput, setShowCustomInput] = useState(false);
 
-  // For BOP, we allow selecting bleeding sites for the entire surface at once.
-  const toggleBop = (toothIdentifier, siteIdentifier) => {
-    const key = `${toothIdentifier}-${siteIdentifier}`;
+  const toggleBop = (siteIdentifier) => {
     setBopSelection(prev => 
-      prev.includes(key) ? prev.filter(s => s !== key) : [...prev, key]
+      prev.includes(siteIdentifier) ? prev.filter(s => s !== siteIdentifier) : [...prev, siteIdentifier]
     );
   };
   
@@ -73,31 +71,20 @@ const Numpad = ({ chartingInfo, onInput, onBopSelect, onClose }) => {
         break;
       case 'mgj':
         title = 'Mucogingival Junction (mm)';
-        infoText = `Surface: ${surface.toUpperCase()} - Center`;
+        infoText = `Tooth ${toothId} - ${surface.toUpperCase()} - Center`;
         buttons = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, '+'];
         break;
       case 'bop':
-        // The BOP screen is now for the entire surface.
         return (
           <>
             <h3 className="font-bold text-blue-700 text-lg">Bleeding on Probing?</h3>
-            <p className="text-gray-600 text-sm">Select bleeding sites for surface: {surface.toUpperCase()}</p>
-            <div className="flex flex-wrap justify-center gap-2 mt-4">
-                {teeth.map(tId => (
-                    <div key={tId} className="flex flex-col items-center gap-1 p-2 bg-gray-100 rounded-md">
-                        <span className="text-sm font-bold">{tId}</span>
-                        <div className="flex gap-1">
-                        {sites.map(s => {
-                            const key = `${tId}-${s}`;
-                            return (
-                                <button key={key} onClick={() => toggleBop(tId, s)}
-                                    className={`w-10 h-8 text-xs rounded uppercase font-bold text-white transition-colors ${bopSelection.includes(key) ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-400 hover:bg-gray-500'}`}>
-                                    {s}
-                                </button>
-                            )
-                        })}
-                        </div>
-                    </div>
+            <p className="text-gray-600 text-sm">Select bleeding sites for Tooth {toothId} - {surface.toUpperCase()}</p>
+            <div className="flex justify-center gap-3 mt-4">
+                {sites.map(s => (
+                    <button key={s} onClick={() => toggleBop(s)}
+                        className={`w-20 h-12 rounded uppercase font-bold text-white transition-colors ${bopSelection.includes(s) ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-400 hover:bg-gray-500'}`}>
+                        {s}
+                    </button>
                 ))}
             </div>
             <div className="mt-4 flex justify-center">

@@ -21,7 +21,6 @@ export const createChartingOrder = (missingTeeth = [], modes = { pd: true, re: t
   const order = [];
   const availableTeeth = (teeth) => teeth.filter(t => !missingTeeth.includes(t));
 
-  // Defines the sequence of modes to be recorded for each site.
   const siteModes = ['pd', 're'].filter(m => modes[m]);
 
   const archSequence = [
@@ -42,26 +41,24 @@ export const createChartingOrder = (missingTeeth = [], modes = { pd: true, re: t
   archSequence.forEach(({ teeth, surface }) => {
     const sites = surface === 'buccal' ? BUCCAL_SITES : LINGUAL_SITES;
 
-    // Add site-specific measurements (PD, RE) for each tooth.
     teeth.forEach(toothId => {
+      // Add site-specific measurements (PD, RE) for each site of the tooth.
       sites.forEach(site => {
         siteModes.forEach(mode => {
           order.push({ toothId, surface, site, type: mode });
         });
       });
+
+      // After all sites for a single tooth are done, add its BOP step if selected.
+      if (modes.bop) {
+        order.push({ toothId, surface, sites, type: 'bop' });
+      }
+
+      // After the BOP step, add its MGJ step if it's a buccal surface and MGJ is selected.
+      if (modes.mgj && surface === 'buccal') {
+        order.push({ toothId, surface, site: 'b', type: 'mgj' });
+      }
     });
-
-    // After all sites on a surface are done, add a single BOP step if selected.
-    if (modes.bop && teeth.length > 0) {
-      // We use the first tooth as a representative for the surface.
-      order.push({ toothId: teeth[0], surface, sites, type: 'bop' });
-    }
-
-    // Finally, add a single MGJ step for the buccal surface if selected.
-    if (modes.mgj && surface === 'buccal' && teeth.length > 0) {
-      // MGJ is recorded for the central buccal site 'b'.
-      order.push({ toothId: teeth[0], surface, site: 'b', type: 'mgj' });
-    }
   });
 
   return order;

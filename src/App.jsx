@@ -38,7 +38,6 @@ export default function App() {
     }
   }, []);
 
-  // The charting order is now dependent on the selected modes.
   const CHARTING_ORDER = useMemo(() => createChartingOrder(missingTeeth, chartingModes), [missingTeeth, chartingModes]);
   
   const [chartingState, setChartingState] = useState({
@@ -46,21 +45,10 @@ export default function App() {
     orderIndex: 0,
   });
 
-  // The active charting info is now simply the current item in the order array.
   const activeChartingInfo = useMemo(() => {
     if (!chartingState.isActive || CHARTING_ORDER.length === 0) return null;
-    // Add the full list of teeth for the current surface to the active info
-    // This is needed for the BOP numpad to display all relevant teeth.
-    const currentStep = CHARTING_ORDER[chartingState.orderIndex];
-    if (currentStep.type === 'bop' || currentStep.type === 'mgj') {
-        const allTeethOnSurface = CHARTING_ORDER
-            .filter(step => step.surface === currentStep.surface)
-            .map(step => step.toothId)
-            .filter((value, index, self) => self.indexOf(value) === index && !missingTeeth.includes(value));
-        return { ...currentStep, teeth: allTeethOnSurface };
-    }
-    return currentStep;
-  }, [chartingState, CHARTING_ORDER, missingTeeth]);
+    return CHARTING_ORDER[chartingState.orderIndex];
+  }, [chartingState, CHARTING_ORDER]);
   
   const handleModeChange = (event) => {
     const { value, checked } = event.target;
@@ -76,7 +64,6 @@ export default function App() {
       toggleMissingTooth(toothId);
       return;
     }
-    // Find the first entry in the order for the clicked site.
     const orderIndex = CHARTING_ORDER.findIndex(item => 
         item.toothId === toothId && item.surface === surface && item.site === site
     );
@@ -92,7 +79,6 @@ export default function App() {
 
   const stopCharting = () => setChartingState({ ...chartingState, isActive: false });
 
-  // The advanceState function is now much simpler.
   const advanceState = () => {
     if (chartingState.orderIndex >= CHARTING_ORDER.length - 1) {
       stopCharting();
@@ -107,27 +93,23 @@ export default function App() {
       const newData = JSON.parse(JSON.stringify(prev));
       if (type === 'pd') newData[toothId].pd[site] = value;
       else if (type === 're') newData[toothId].re[site] = value;
-      else if (type === 'mgj') {
-          // MGJ is recorded for all teeth on the buccal surface
-          const teethOnSurface = activeChartingInfo.teeth;
-          teethOnSurface.forEach(tId => {
-              newData[tId].mgj.b = value;
-          });
-      }
+      else if (type === 'mgj') newData[toothId].mgj.b = value;
       return newData;
     });
     advanceState();
   };
 
   const handleBopInput = (bopSites) => {
-    const { surface, sites, teeth } = activeChartingInfo;
+    const { toothId, sites } = activeChartingInfo;
     setChartData((prev) => {
         const newData = JSON.parse(JSON.stringify(prev));
-        teeth.forEach(toothId => {
-            sites.forEach(site => {
-                const bopKey = `${toothId}-${site}`;
-                newData[toothId].bleeding[site] = bopSites.includes(bopKey);
-            });
+        // Reset BOP for the current tooth's surface first
+        sites.forEach(site => {
+            newData[toothId].bleeding[site] = false;
+        });
+        // Set the selected bleeding sites for the current tooth
+        bopSites.forEach(site => {
+            newData[toothId].bleeding[site] = true;
         });
         return newData;
     });
