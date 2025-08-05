@@ -1,5 +1,3 @@
-// src/App.jsx
-
 import React, { useState, useMemo, useEffect } from 'react';
 import ToothChart from './components/ToothChart';
 import Numpad from './components/Numpad';
@@ -119,6 +117,46 @@ export default function App() {
     }
   };
 
+  // --- New functions for download/upload ---
+
+  const handleDownload = () => {
+    const dataToSave = {
+      chartData,
+      missingTeeth,
+    };
+    const blob = new Blob([JSON.stringify(dataToSave, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `periodontal-chart-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const loadedData = JSON.parse(e.target.result);
+          if (loadedData.chartData && loadedData.missingTeeth) {
+            setChartData(loadedData.chartData);
+            setMissingTeeth(loadedData.missingTeeth);
+            alert('Chart data loaded successfully!');
+          } else {
+            alert('Invalid chart file format.');
+          }
+        } catch (error) {
+          alert('Error reading or parsing the file.');
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 p-4 font-sans">
       <div className="w-full mx-auto px-2 sm:px-4 md:px-6 pb-64">
@@ -139,17 +177,27 @@ export default function App() {
                 >
                     Save Chart
                 </button>
+                <button
+                    onClick={handleDownload}
+                    className="px-4 py-2 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors"
+                >
+                    Download
+                </button>
+                <label className="px-4 py-2 rounded-lg font-semibold text-white bg-purple-600 hover:bg-purple-700 transition-colors cursor-pointer">
+                    Upload
+                    <input type="file" accept=".json" className="hidden" onChange={handleUpload} />
+                </label>
             </div>
         </div>
 
-        <ToothChart 
-            data={chartData} 
+        <ToothChart
+            data={chartData}
             onSiteClick={handleToothClick}
             activeSite={activeChartingInfo}
             missingTeeth={missingTeeth}
             isEditMode={isEditMode}
         />
-        
+
         <ChartSummary chartData={chartData} missingTeeth={missingTeeth} />
 
         {/* --- New History Panel --- */}
