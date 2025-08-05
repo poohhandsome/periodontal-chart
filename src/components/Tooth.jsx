@@ -26,21 +26,8 @@ const Tooth = ({ toothId, surface, arch, toothData, onSiteClick, activeSite, isE
         return `${x},${y}`;
       }).join(' ');
   };
-
-  // Function to calculate the points for the pocket depth line
-  const getPocketLinePoints = (pdData, reData) => {
-    return siteKeys.map((site, index) => {
-        const pd = pdData[site] ?? 0;
-        const re = reData[site] ?? 0;
-        const x = index * SITE_WIDTH + SITE_WIDTH / 2;
-        // The pocket depth line starts from the recession line
-        const y = CEJ_Y + ((re + pd) * PIXELS_PER_MM * direction);
-        return `${x},${y}`;
-    }).join(' ');
-  };
   
   const recessionPoints = getLinePoints(toothData.re);
-  const pocketPoints = getPocketLinePoints(toothData.pd, toothData.re);
   const mgjValue = toothData.mgj.b;
   const mgjPoints = (surface === 'buccal' && mgjValue) ? `0,${CEJ_Y + (mgjValue * PIXELS_PER_MM * direction)} ${SVG_WIDTH},${CEJ_Y + (mgjValue * PIXELS_PER_MM * direction)}` : '';
 
@@ -64,8 +51,31 @@ const Tooth = ({ toothId, surface, arch, toothData, onSiteClick, activeSite, isE
             className="opacity-25"
           />
 
-          {/* Pocket Depth Line (Blue) */}
-          <polyline points={pocketPoints} fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+          {/* Vertical lines for Pocket Depth */}
+          <g className="pocket-depth-lines">
+            {siteKeys.map((site, index) => {
+              const pd = toothData.pd[site] ?? 0;
+              const re = toothData.re[site] ?? 0;
+              if (pd > 0) {
+                const x = index * SITE_WIDTH + SITE_WIDTH / 2;
+                const startY = CEJ_Y + (re * PIXELS_PER_MM * direction);
+                const endY = startY + (pd * PIXELS_PER_MM * direction);
+                return (
+                  <line
+                    key={`pd-line-${site}`}
+                    x1={x}
+                    y1={startY}
+                    x2={x}
+                    y2={endY}
+                    stroke="#3B82F6"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                );
+              }
+              return null;
+            })}
+          </g>
 
           {/* Recession Line (Red) */}
           <polyline points={recessionPoints} fill="none" stroke="#EF4444" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
