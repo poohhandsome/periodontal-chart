@@ -1,8 +1,9 @@
 // src/components/ToothChart.jsx
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import Tooth from './Tooth';
-import DirectionPointer from './DirectionPointer'; // Import the new component
+// The DirectionPointer component is no longer needed.
+// import DirectionPointer from './DirectionPointer'; 
 import { UPPER_RIGHT, UPPER_LEFT, LOWER_LEFT, LOWER_RIGHT } from '../chart.config';
 
 // Renders a cell with 3 data points, now with highlighting for PD >= 4mm
@@ -81,41 +82,8 @@ const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode })
   const buccalSites = ['db', 'b', 'mb'];
   const lingualSites = ['dl', 'l', 'ml'];
 
-  // This logic determines the current charting segment to show the direction pointer
-  const activeSegmentInfo = useMemo(() => {
-    if (!activeSite) return null;
-
-    const { toothId, surface } = activeSite;
-    const availableTeeth = (teeth) => teeth.filter(t => !missingTeeth.includes(t));
-
-    const sequence = [
-      { arch: 'upper', surface: 'buccal', teeth: availableTeeth(UPPER_RIGHT), reversed: false, quadrant: 'Q1'},
-      { arch: 'upper', surface: 'lingual', teeth: availableTeeth(UPPER_RIGHT.slice().reverse()), reversed: true, quadrant: 'Q1'},
-      { arch: 'upper', surface: 'buccal', teeth: availableTeeth(UPPER_LEFT), reversed: false, quadrant: 'Q2'},
-      { arch: 'upper', surface: 'lingual', teeth: availableTeeth(UPPER_LEFT.slice().reverse()), reversed: true, quadrant: 'Q2'},
-      { arch: 'lower', surface: 'lingual', teeth: availableTeeth(LOWER_LEFT.slice().reverse()), reversed: true, quadrant: 'Q3'},
-      { arch: 'lower', surface: 'buccal', teeth: availableTeeth(LOWER_LEFT), reversed: false, quadrant: 'Q3'},
-      { arch: 'lower', surface: 'lingual', teeth: availableTeeth(LOWER_RIGHT), reversed: false, quadrant: 'Q4'},
-      { arch: 'lower', surface: 'buccal', teeth: availableTeeth(LOWER_RIGHT.slice().reverse()), reversed: true, quadrant: 'Q4'},
-    ];
-    
-    const currentSegment = sequence.find(seg => seg.surface === surface && seg.teeth.includes(toothId));
-
-    if (!currentSegment || currentSegment.teeth.length === 0) return null;
-
-    const sites = surface === 'buccal' ? buccalSites : lingualSites;
-    const startTooth = currentSegment.teeth[0];
-    const endTooth = currentSegment.teeth[currentSegment.teeth.length - 1];
-    const startSite = sites[0];
-    const endSite = sites[sites.length - 1];
-
-    return {
-      ...currentSegment,
-      startLabel: `${startTooth}${startSite.toUpperCase()}`,
-      endLabel: `${endTooth}${endSite.toUpperCase()}`,
-    };
-  }, [activeSite, missingTeeth]);
-
+  // The logic for the direction pointer has been removed.
+  // const activeSegmentInfo = useMemo(() => { ... });
 
   const renderQuadrant = (teeth, surface, arch) => (
     <div className="flex flex-1">
@@ -136,31 +104,8 @@ const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode })
     </div>
   );
   
-  const renderPointer = (arch, surface) => {
-    if (!activeSegmentInfo || activeSegmentInfo.arch !== arch || activeSegmentInfo.surface !== surface) {
-      return null;
-    }
-    
-    const isFullArch = ['Q1', 'Q2'].includes(activeSegmentInfo.quadrant) || ['Q3', 'Q4'].includes(activeSegmentInfo.quadrant);
-
-    if (isFullArch) {
-        const isRightSide = ['Q1', 'Q4'].includes(activeSegmentInfo.quadrant);
-        const isLeftSide = ['Q2', 'Q3'].includes(activeSegmentInfo.quadrant);
-        return (
-            <div className="flex-1 flex">
-                <div className="flex-1 relative">
-                    {isRightSide && <DirectionPointer startLabel={activeSegmentInfo.startLabel} endLabel={activeSegmentInfo.endLabel} isReversed={activeSegmentInfo.reversed} />}
-                </div>
-                <div className="w-4"></div>
-                <div className="flex-1 relative">
-                    {isLeftSide && <DirectionPointer startLabel={activeSegmentInfo.startLabel} endLabel={activeSegmentInfo.endLabel} isReversed={activeSegmentInfo.reversed} />}
-                </div>
-            </div>
-        );
-    }
-    return null;
-  };
-
+  // The function to render the pointer has been removed.
+  // const renderPointer = (arch, surface) => { ... };
 
   return (
     <div className="bg-white p-4 rounded-xl shadow-lg">
@@ -170,10 +115,8 @@ const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode })
           <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="pd" siteKeys={buccalSites} label="PD" missingTeeth={missingTeeth}/>
           <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="re" siteKeys={buccalSites} label="RE" missingTeeth={missingTeeth}/>
           <MGJDataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} label="MGJ" missingTeeth={missingTeeth}/>
-          <div className="h-8 flex items-center">
-            <div className="w-10"></div>
-            {renderPointer('upper', 'buccal')}
-          </div>
+          {/* The div that held the pointer is now just for spacing */}
+          <div className="h-2"></div>
           <div className="flex justify-center items-center">
             <div className="w-10"></div>
             <div className="flex-1 flex">
@@ -184,10 +127,7 @@ const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode })
           </div>
         </div>
         <div className="space-y-1 pt-3 border-t-4 border-gray-200">
-          <div className="h-8 flex items-center">
-            <div className="w-10"></div>
-            {renderPointer('upper', 'lingual')}
-          </div>
+          <div className="h-2"></div>
           <div className="flex justify-center items-center">
              <div className="w-10"></div>
              <div className="flex-1 flex">
@@ -204,10 +144,7 @@ const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode })
         <div className="space-y-1 pt-6 border-t-8 border-gray-200">
             <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="pd" siteKeys={lingualSites} label="PD" missingTeeth={missingTeeth}/>
             <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="re" siteKeys={lingualSites} label="RE" missingTeeth={missingTeeth}/>
-            <div className="h-8 flex items-center">
-              <div className="w-10"></div>
-              {renderPointer('lower', 'lingual')}
-            </div>
+            <div className="h-2"></div>
             <div className="flex justify-center items-center">
                 <div className="w-10"></div>
                 <div className="flex-1 flex">
@@ -218,10 +155,7 @@ const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode })
             </div>
         </div>
         <div className="space-y-1 pt-3 border-t-4 border-gray-200">
-            <div className="h-8 flex items-center">
-              <div className="w-10"></div>
-              {renderPointer('lower', 'buccal')}
-            </div>
+            <div className="h-2"></div>
             <div className="flex justify-center items-center">
                 <div className="w-10"></div>
                 <div className="flex-1 flex">
