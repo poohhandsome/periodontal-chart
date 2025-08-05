@@ -65,16 +65,17 @@ export default function App() {
       return;
     }
     
-    // Find the first entry in the order for the exact clicked site.
+    // **FIX for BOP/MGJ only modes**: The logic is now more robust.
+    // 1. Try to find a direct match for the site clicked (works for PD/RE).
     let orderIndex = CHARTING_ORDER.findIndex(item => 
         item.toothId === toothId && item.surface === surface && item.site === site
     );
     
-    // **FIX for MGJ**: If no match is found, check if an MGJ step exists for this tooth surface.
-    // This allows clicking any buccal site to start an MGJ measurement.
-    if (orderIndex === -1 && surface === 'buccal') {
+    // 2. If no direct match, find the first available action for that tooth surface.
+    // This correctly finds the BOP or MGJ step when they are the only modes selected.
+    if (orderIndex === -1) {
         orderIndex = CHARTING_ORDER.findIndex(item => 
-            item.toothId === toothId && item.surface === surface && item.type === 'mgj'
+            item.toothId === toothId && item.surface === surface
         );
     }
     
@@ -83,8 +84,6 @@ export default function App() {
     } else if (Object.values(chartingModes).every(m => !m)) {
         alert("Please select at least one charting mode.");
     } else {
-        // This message helps if the user clicks a site that isn't in the current sequence
-        // (e.g., clicking a lingual site when only MGJ is selected).
         alert("No active charting sequence for this site with current modes.");
     }
   };
@@ -115,11 +114,9 @@ export default function App() {
     const { toothId, sites } = activeChartingInfo;
     setChartData((prev) => {
         const newData = JSON.parse(JSON.stringify(prev));
-        // Reset BOP for the current tooth's surface first
         sites.forEach(site => {
             newData[toothId].bleeding[site] = false;
         });
-        // Set the selected bleeding sites for the current tooth
         bopSites.forEach(site => {
             newData[toothId].bleeding[site] = true;
         });
@@ -128,6 +125,7 @@ export default function App() {
     advanceState();
   };
 
+  // ... (handleSaveChart, handleLoadChart, handleDeleteChart, etc. are unchanged)
   const handleSaveChart = () => {
     const newHistoryEntry = {
       id: Date.now(),
