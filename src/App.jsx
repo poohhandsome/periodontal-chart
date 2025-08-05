@@ -5,7 +5,7 @@ import ToothChart from './components/ToothChart';
 import Numpad from './components/Numpad';
 import ChartSummary from './components/ChartSummary';
 import HistoryPanel from './components/HistoryPanel';
-import PatientInfo from './components/PatientInfo'; // <-- Import new component
+import PatientInfo from './components/PatientInfo'; // <-- Import PatientInfo component
 import { createChartingOrder, INITIAL_CHART_DATA } from './chart.config';
 
 export default function App() {
@@ -13,14 +13,30 @@ export default function App() {
   const [missingTeeth, setMissingTeeth] = useState([]);
   const [isEditMode, setIsEditMode] = useState(false);
   const [history, setHistory] = useState([]);
-  const [patientHN, setPatientHN] = useState(''); // <-- New state for Patient HN
-  const [patientName, setPatientName] = useState(''); // <-- New state for Patient Name
+  const [patientHN, setPatientHN] = useState('');
+  const [patientName, setPatientName] = useState('');
 
-  // Load history from localStorage when the app starts
+  // Load and clean history from localStorage when the app starts
   useEffect(() => {
     const savedHistory = localStorage.getItem('periodontalChartHistory');
     if (savedHistory) {
-      setHistory(JSON.parse(savedHistory));
+      const parsedHistory = JSON.parse(savedHistory);
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      // Filter out charts older than 7 days
+      const stillValidHistory = parsedHistory.filter(item => {
+        const itemDate = new Date(item.date);
+        return itemDate > sevenDaysAgo;
+      });
+
+      setHistory(stillValidHistory);
+
+      // If any charts were removed, update localStorage and notify the user
+      if (stillValidHistory.length < parsedHistory.length) {
+        localStorage.setItem('periodontalChartHistory', JSON.stringify(stillValidHistory));
+        alert(`${parsedHistory.length - stillValidHistory.length} expired chart(s) have been removed.`);
+      }
     }
   }, []);
 
@@ -37,7 +53,6 @@ export default function App() {
     return { ...surfaceInfo, site };
   }, [chartingState, CHARTING_ORDER]);
   
-  // ... (handleToothClick, toggleMissingTooth, and other handlers are the same)
   const toggleMissingTooth = (toothId) => {
     setMissingTeeth(prev => prev.includes(toothId) ? prev.filter(t => t !== toothId) : [...prev, toothId]);
   };
@@ -89,22 +104,21 @@ export default function App() {
     advanceState();
   };
 
-  // --- New functions for managing history ---
-
   const handleSaveChart = () => {
     const newHistoryEntry = {
       id: Date.now(),
-      date: new Date().toISOString(),
+      date: new Date().toISOString(), // This timestamp is used for the 7-day countdown
       chartData: chartData,
       missingTeeth: missingTeeth,
       patientHN: patientHN,
       patientName: patientName,
     };
 
+    // Always adds a new entry, giving it a fresh 7-day timer
     const updatedHistory = [newHistoryEntry, ...history];
     setHistory(updatedHistory);
     localStorage.setItem('periodontalChartHistory', JSON.stringify(updatedHistory));
-    alert('Chart saved successfully!');
+    alert('Chart saved to history successfully!');
   };
 
   const handleLoadChart = (id) => {
@@ -125,8 +139,6 @@ export default function App() {
       localStorage.setItem('periodontalChartHistory', JSON.stringify(updatedHistory));
     }
   };
-
-  // --- Updated download/upload functions ---
 
   const handleDownload = () => {
     const dataToSave = {
