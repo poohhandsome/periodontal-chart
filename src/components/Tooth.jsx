@@ -14,7 +14,8 @@ const getSiteKeys = (surface) => surface === 'buccal' ? ['db', 'b', 'mb'] : ['dl
 
 const Tooth = ({ toothId, surface, arch, toothData, onSiteClick, activeSite, isEditMode }) => {
   const siteKeys = getSiteKeys(surface);
-  const direction = arch === 'upper' ? -1 : 1; // Used to draw measurements up or down
+  // This direction variable correctly handles the measurement logic for the upper arch.
+  const direction = arch === 'upper' ? -1 : 1; 
 
   // Function to calculate the points for the recession line
   const getLinePoints = (dataArray) => {
@@ -42,14 +43,12 @@ const Tooth = ({ toothId, surface, arch, toothData, onSiteClick, activeSite, isE
             {Array.from({ length: 15 }).map((_, i) => (<line key={`grid-${i}`} x1="0" y1={CEJ_Y + (i - 7) * PIXELS_PER_MM} x2={SVG_WIDTH} y2={CEJ_Y + (i - 7) * PIXELS_PER_MM} stroke={i === 7 ? '#ccc' : '#E5E7EB'} strokeWidth="0.5"/>))}
           </g>
           
-          {/* This is the new part: loading your custom image */}
+          {/* Loading your custom image */}
           <image 
             href={`/teeth/${toothId}.png`} 
             width={SVG_WIDTH} 
             height={SVG_HEIGHT} 
-            className="opacity-10"
-            // This transform correctly flips the upper teeth
-            transform={arch === 'upper' ? `translate(0, ${SVG_HEIGHT}) scale(1, -1)` : ''}
+            className="opacity-25"
           />
 
           {/* Shading for probing depths >= 4mm */}
@@ -82,7 +81,7 @@ const Tooth = ({ toothId, surface, arch, toothData, onSiteClick, activeSite, isE
           <g className="interaction-layer">
             {siteKeys.map((site, index) => {
               const isActive = activeSite && activeSite.toothId === toothId && activeSite.surface === surface && activeSite.site === site;
-              return (<rect key={`interactive-${site}`} x={index * SITE_WIDTH} y="0" width={SITE_WIDTH} height={SVG_HEIGHT} fill="transparent" onClick={() => !isEditMode && onSiteClick(toothId, surface, site)}
+              return (<rect key={`interactive-${site}`} x={index * SITE_WIDTH} y="0" width={SVG_WIDTH} height={SVG_HEIGHT} fill="transparent" onClick={() => !isEditMode && onSiteClick(toothId, surface, site)}
                   className={`cursor-pointer transition-colors ${isActive ? 'fill-blue-500/20' : 'hover:fill-blue-500/10'}`} />)
             })}
           </g>
