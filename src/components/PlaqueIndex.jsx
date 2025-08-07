@@ -44,24 +44,24 @@ const PlaqueIndex = () => {
             });
         }
     };
-
-    const handleClearChart = () => {
-        setPlaqueData(INITIAL_PLAQUE_DATA);
-        setMissingTeeth([]);
-        setClearConfirmOpen(false);
-    };
     
     const handleAddAllProximal = () => {
         setPlaqueData(prevData => {
             const newData = JSON.parse(JSON.stringify(prevData));
             ALL_TEETH_PLAQUE.forEach(toothId => {
                 if (!missingTeeth.includes(toothId)) {
-                    newData[toothId].m = true;
-                    newData[toothId].d = true;
+                    newData[toothId].m = true; // Correctly targets Mesial
+                    newData[toothId].d = true; // Correctly targets Distal
                 }
             });
             return newData;
         });
+    };
+
+    const handleClearChart = () => {
+        setPlaqueData(INITIAL_PLAQUE_DATA);
+        setMissingTeeth([]);
+        setClearConfirmOpen(false);
     };
 
     const handleDownload = () => {
