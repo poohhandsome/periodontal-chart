@@ -38,27 +38,41 @@ export const createChartingOrder = (missingTeeth = [], modes = {}, customSequenc
 
   customSequence.forEach(segment => {
     const { teeth: baseTeeth, surface } = SEQUENCE_MAP[segment.id];
-    
-    // Determine the direction for teeth and sites
-    const isReversed = segment.direction === 'RL';
-    const teeth = availableTeeth(isReversed ? [...baseTeeth].reverse() : baseTeeth);
-    
-    let sites;
+    const quadrant = segment.id.substring(0, 2); // 'Q1', 'Q2', etc.
+
+    // Determine the direction for TEETH based on user's custom sequence
+    const isReversedForTeeth = segment.direction === 'RL';
+    const teeth = availableTeeth(isReversedForTeeth ? [...baseTeeth].reverse() : baseTeeth);
+
+    // Determine the site order for PROBING (PD, RE) based on user's custom sequence direction
+    let sitesForProbing;
     if (surface === 'buccal') {
-        sites = isReversed ? BUCCAL_SITES_RL : BUCCAL_SITES_LR;
-    } else {
-        sites = isReversed ? LINGUAL_SITES_RL : LINGUAL_SITES_LR;
+        sitesForProbing = isReversedForTeeth ? BUCCAL_SITES_RL : BUCCAL_SITES_LR;
+    } else { // lingual
+        sitesForProbing = isReversedForTeeth ? LINGUAL_SITES_RL : LINGUAL_SITES_LR;
+    }
+
+    // Determine the site order for the BOP BUTTONS based on ANATOMY (screen position)
+    // Q2 and Q3 are on the left side of the screen, so their mesial side is towards the center (right).
+    const isQuadrantOnLeftSide = quadrant === 'Q2' || quadrant === 'Q3';
+    let sitesForBopButtons;
+    if (surface === 'buccal') {
+      sitesForBopButtons = isQuadrantOnLeftSide ? BUCCAL_SITES_RL : BUCCAL_SITES_LR;
+    } else { // lingual
+      sitesForBopButtons = isQuadrantOnLeftSide ? LINGUAL_SITES_RL : LINGUAL_SITES_LR;
     }
 
     teeth.forEach(toothId => {
-      sites.forEach(site => {
+      // Create order for PD, RE using the probing site order
+      sitesForProbing.forEach(site => {
         siteModes.forEach(mode => {
           order.push({ toothId, surface, site, type: mode });
         });
       });
 
       if (modes.bop) {
-        order.push({ toothId, surface, sites, type: 'bop' });
+        // Create order for BOP using the ANATOMICALLY correct button order
+        order.push({ toothId, surface, sites: sitesForBopButtons, type: 'bop' });
       }
 
       if (modes.mgj && surface === 'buccal') {
