@@ -1,20 +1,6 @@
 // src/components/PlaqueTooth.jsx
 import React from 'react';
 
-const PlaqueSite = ({ side, hasPlaque, onClick }) => (
-    <div
-        onClick={onClick}
-        className={`w-1/2 h-1/2 flex items-center justify-center cursor-pointer 
-                    ${hasPlaque ? 'bg-red-500' : 'bg-gray-200'}
-                    ${side === 'm' ? 'rounded-tl-md' : ''}
-                    ${side === 'd' ? 'rounded-tr-md' : ''}
-                    ${side === 'b' ? 'rounded-bl-md' : ''}
-                    ${side === 'l' ? 'rounded-br-md' : ''}
-                    hover:bg-red-300 transition-colors`}
-    >
-    </div>
-);
-
 const PlaqueTooth = ({ toothId, toothData, isMissing, onClick, isEditMode }) => {
     const editModeClass = isEditMode ? 'relative after:absolute after:inset-0 after:bg-red-500/20 after:cursor-pointer' : '';
 
@@ -31,12 +17,46 @@ const PlaqueTooth = ({ toothId, toothData, isMissing, onClick, isEditMode }) => 
 
     return (
         <div className={`flex flex-col items-center gap-1 ${editModeClass}`}>
-            <div className="w-10 h-10 flex flex-wrap border border-gray-400 rounded-md overflow-hidden">
-                <PlaqueSite side="m" hasPlaque={toothData.m} onClick={() => onClick(toothId, 'm')} />
-                <PlaqueSite side="d" hasPlaque={toothData.d} onClick={() => onClick(toothId, 'd')} />
-                <PlaqueSite side="b" hasPlaque={toothData.b} onClick={() => onClick(toothId, 'b')} />
-                <PlaqueSite side="l" hasPlaque={toothData.l} onClick={() => onClick(toothId, 'l')} />
-            </div>
+            <svg width="40" height="40" viewBox="0 0 40 40" className="cursor-pointer">
+                <g>
+                    {/* Mesial (Top Triangle) */}
+                    <path
+                        d="M 0 0 L 40 0 L 20 20 Z"
+                        fill={toothData.m ? '#EF4444' : '#E5E7EB'}
+                        stroke="#9CA3AF"
+                        strokeWidth="0.5"
+                        onClick={() => onClick(toothId, 'm')}
+                        className="hover:opacity-75 transition-opacity"
+                    />
+                    {/* Distal (Bottom Triangle) */}
+                    <path
+                        d="M 0 40 L 40 40 L 20 20 Z"
+                        fill={toothData.d ? '#EF4444' : '#E5E7EB'}
+                        stroke="#9CA3AF"
+                        strokeWidth="0.5"
+                        onClick={() => onClick(toothId, 'd')}
+                        className="hover:opacity-75 transition-opacity"
+                    />
+                    {/* Buccal (Left Triangle) */}
+                    <path
+                        d="M 0 0 L 0 40 L 20 20 Z"
+                        fill={toothData.b ? '#EF4444' : '#E5E7EB'}
+                        stroke="#9CA3AF"
+                        strokeWidth="0.5"
+                        onClick={() => onClick(toothId, 'b')}
+                        className="hover:opacity-75 transition-opacity"
+                    />
+                    {/* Lingual (Right Triangle) */}
+                    <path
+                        d="M 40 0 L 40 40 L 20 20 Z"
+                        fill={toothData.l ? '#EF4444' : '#E5E7EB'}
+                        stroke="#9CA3AF"
+                        strokeWidth="0.5"
+                        onClick={() => onClick(toothId, 'l')}
+                        className="hover:opacity-75 transition-opacity"
+                    />
+                </g>
+            </svg>
             <div className="text-xs font-mono select-none">{toothId}</div>
         </div>
     );
