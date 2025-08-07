@@ -50,8 +50,8 @@ const PlaqueIndex = () => {
             const newData = JSON.parse(JSON.stringify(prevData));
             ALL_TEETH_PLAQUE.forEach(toothId => {
                 if (!missingTeeth.includes(toothId)) {
-                    newData[toothId].m = true; // Correctly targets Mesial
-                    newData[toothId].d = true; // Correctly targets Distal
+                    newData[toothId].b = true; // Correctly targets Mesial
+                    newData[toothId].l = true; // Correctly targets Distal
                 }
             });
             return newData;
