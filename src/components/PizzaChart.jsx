@@ -1,7 +1,7 @@
 // src/components/PizzaChart.jsx
 
 import React from 'react';
-import { UPPER_LEFT, LOWER_LEFT } from '../chart.config';
+import { UPPER_LEFT, LOWER_LEFT, LOWER_RIGHT } from '../chart.config';
 
 // Helper function to calculate the x, y coordinates for a point on a circle
 const getCoords = (angle, radius) => {
@@ -31,11 +31,16 @@ const PizzaChart = ({ toothId, bleedingData = {}, isMissing = false, rotation = 
 
   const getBleedingStatusForSlice = (site) => {
     let key = site;
-    const isLeftSide = UPPER_LEFT.includes(toothId) || LOWER_LEFT.includes(toothId);
+    
+    // Determine which quadrants need to have their M-D data keys swapped
+    // to match the fixed visual layout of the pizza chart.
+    const isUpperLeft = UPPER_LEFT.includes(toothId); // Q2
+    const isLowerRight = LOWER_RIGHT.includes(toothId); // Q4
+    
+    // Based on the visual layout, Q2 and Q4 require the M-D flip.
+    const needsFlip = isUpperLeft || isLowerRight;
 
-    // For the left side of the mouth (Q2 and Q3), we need to flip the data keys
-    // to match the fixed visual layout of the pizza slices.
-    if (isLeftSide) {
+    if (needsFlip) {
       if (site === 'db') key = 'mb';
       else if (site === 'mb') key = 'db';
       else if (site === 'dl') key = 'ml';
