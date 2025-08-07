@@ -6,8 +6,8 @@ const PlaqueTooth = ({ toothId, toothData, isMissing, onClick, isEditMode }) => 
 
     if (isMissing) {
         return (
-            <div className={`flex flex-col items-center gap-1 ${editModeClass}`} onClick={() => onClick(toothId)}>
-                <div className="w-10 h-10 bg-gray-300 rounded-md flex items-center justify-center">
+            <div className={`flex flex-col items-center justify-center h-full ${editModeClass}`} onClick={() => onClick(toothId)}>
+                <div className="w-full h-full bg-gray-300 rounded-md flex items-center justify-center">
                     <span className="text-gray-500 text-xs select-none">Missing</span>
                 </div>
                 <div className="text-xs font-mono select-none">{toothId}</div>
@@ -16,8 +16,8 @@ const PlaqueTooth = ({ toothId, toothData, isMissing, onClick, isEditMode }) => 
     }
 
     return (
-        <div className={`flex flex-col items-center gap-1 ${editModeClass}`}>
-            <svg width="40" height="40" viewBox="0 0 40 40" className="cursor-pointer">
+        <div className={`flex flex-col items-center h-full ${editModeClass}`}>
+            <svg width="100%" height="100%" viewBox="0 0 40 40" className="cursor-pointer">
                 <g>
                     {/* Mesial (Top Triangle) */}
                     <path
