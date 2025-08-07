@@ -1,14 +1,14 @@
-// src/App.jsx
+// src/components/PeriodontalChartApp.jsx
 
 import React, { useState, useMemo, useEffect } from 'react';
-import ToothChart from './components/ToothChart';
-import Numpad from './components/Numpad';
-import ChartSummary from './components/ChartSummary';
-import HistoryPanel from './components/HistoryPanel';
-import PatientInfo from './components/PatientInfo';
-import ChartingModeSelector from './components/ChartingModeSelector';
-import SequenceCustomizer from './components/SequenceCustomizer'; // Import the new component
-import { createChartingOrder, INITIAL_CHART_DATA } from './chart.config';
+import ToothChart from './ToothChart';
+import Numpad from './Numpad';
+import ChartSummary from './ChartSummary';
+import HistoryPanel from './HistoryPanel';
+import PatientInfo from './PatientInfo';
+import ChartingModeSelector from './ChartingModeSelector';
+import SequenceCustomizer from './SequenceCustomizer';
+import { createChartingOrder, INITIAL_CHART_DATA } from '../chart.config';
 
 const DEFAULT_SEQUENCE = [
     { id: 'Q1B', label: 'Q1 Buccal', direction: 'LR' },
@@ -21,7 +21,7 @@ const DEFAULT_SEQUENCE = [
     { id: 'Q3B', label: 'Q3 Buccal', direction: 'RL' },
 ];
 
-export default function App() {
+export default function PeriodontalChartApp() {
   const [chartData, setChartData] = useState(INITIAL_CHART_DATA);
   const [missingTeeth, setMissingTeeth] = useState([]);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -53,7 +53,7 @@ export default function App() {
       setHistory(stillValidHistory);
       if (stillValidHistory.length < parsedHistory.length) {
         localStorage.setItem('periodontalChartHistory', JSON.stringify(stillValidHistory));
-        alert(`${parsedHistory.length - parsedHistory.length} expired chart(s) have been removed.`);
+        alert(`${parsedHistory.length - stillValidHistory.length} expired chart(s) have been removed.`);
       }
     }
   }, []);
@@ -158,7 +158,7 @@ export default function App() {
     const updatedHistory = [newHistoryEntry, ...history];
     setHistory(updatedHistory);
     localStorage.setItem('periodontalChartHistory', JSON.stringify(updatedHistory));
-    alert('Chart saved to history successfully!');
+    alert('Chart draft saved to history successfully!');
   };
 
   const handleLoadChart = (id) => {
@@ -189,7 +189,7 @@ export default function App() {
     a.href = url;
     a.download = fileName;
     document.body.appendChild(a);
-a.click();
+    a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
@@ -222,7 +222,10 @@ a.click();
     <div className="min-h-screen bg-gray-100 text-gray-800 p-4 font-sans">
       <div className="w-full mx-auto px-2 sm:px-4 md:px-6 pb-64">
         <div className="flex justify-between items-center mb-4">
-            <h1 className="text-3xl font-bold text-blue-700">Periodontal Chart</h1>
+            <div className="flex items-center gap-4">
+              <a href="#" className="text-blue-600 hover:text-blue-800 font-semibold">&larr; Back to Home</a>
+              <h1 className="text-3xl font-bold text-blue-700">Periodontal Chart</h1>
+            </div>
             <div className="space-x-2 flex items-center">
                 <button 
                     onClick={() => setShowCustomizer(true)}
