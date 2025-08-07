@@ -189,7 +189,7 @@ export default function App() {
     a.href = url;
     a.download = fileName;
     document.body.appendChild(a);
-    a.click();
+a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
@@ -234,7 +234,7 @@ export default function App() {
                     {isEditMode ? 'Finish Editing' : 'Remove Teeth'}
                 </button>
                  <button onClick={handleSaveChart} className="px-4 py-2 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors h-10">
-                    Save Chart
+                    Save Draft
                 </button>
                 <button onClick={handleDownload} className="px-4 py-2 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors h-10">
                     Download

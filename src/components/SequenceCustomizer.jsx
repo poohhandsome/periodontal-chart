@@ -1,16 +1,45 @@
 // src/components/SequenceCustomizer.jsx
 import React, { useState } from 'react';
 
-const DraggableItem = ({ item, index, onDragStart, onDragOver, onDrop, onToggleDirection }) => {
+const ItemMover = ({ onMove, disabled, direction }) => {
+    const isUp = direction === 'up';
+    return (
+        <button
+            onClick={onMove}
+            disabled={disabled}
+            className="p-1 rounded-full hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            title={`Move ${isUp ? 'Up' : 'Down'}`}
+        >
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={isUp ? 'transform rotate-[-90deg]' : 'transform rotate-90'}
+            >
+                <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+        </button>
+    );
+};
+
+const SequenceItem = ({ item, onToggleDirection, onMove, isFirst, isLast }) => {
   return (
     <div
-      draggable
-      onDragStart={(e) => onDragStart(e, index)}
-      onDragOver={onDragOver}
-      onDrop={(e) => onDrop(e, index)}
-      className="flex items-center justify-between p-2 bg-white border rounded-lg shadow-sm cursor-grab active:cursor-grabbing"
+      className="flex items-center justify-between p-2 bg-white border rounded-lg shadow-sm"
     >
-      <span className="font-semibold text-gray-700">{item.label}</span>
+        <div className="flex items-center gap-2">
+             <div className="flex flex-col">
+                <ItemMover onMove={() => onMove('up')} disabled={isFirst} direction="up" />
+                <ItemMover onMove={() => onMove('down')} disabled={isLast} direction="down" />
+            </div>
+            <span className="font-semibold text-gray-700">{item.label}</span>
+        </div>
       <button
         onClick={() => onToggleDirection(item.id)}
         className="p-1 rounded-full hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -38,25 +67,15 @@ const DraggableItem = ({ item, index, onDragStart, onDragOver, onDrop, onToggleD
 
 const SequenceCustomizer = ({ sequence, onSequenceChange, onClose }) => {
   const [localSequence, setLocalSequence] = useState(sequence);
-  const [draggedIndex, setDraggedIndex] = useState(null);
 
-  const handleDragStart = (e, index) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e, droppedOnIndex) => {
-    e.preventDefault();
-    const draggedItem = localSequence[draggedIndex];
+  const handleMove = (index, direction) => {
     const newSequence = [...localSequence];
-    newSequence.splice(draggedIndex, 1);
-    newSequence.splice(droppedOnIndex, 0, draggedItem);
+    const item = newSequence[index];
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= newSequence.length) return;
+    newSequence.splice(index, 1);
+    newSequence.splice(newIndex, 0, item);
     setLocalSequence(newSequence);
-    setDraggedIndex(null);
   };
 
   const handleToggleDirection = (id) => {
@@ -79,18 +98,17 @@ const SequenceCustomizer = ({ sequence, onSequenceChange, onClose }) => {
       <div className="bg-gray-50 rounded-xl shadow-2xl w-full max-w-md p-6">
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Customize Charting Sequence</h2>
         <p className="text-sm text-gray-600 mb-4">
-          Drag and drop the blocks to reorder your charting workflow. Use the arrow buttons to change the direction for each segment.
+          Use the arrows to reorder your charting workflow. Use the arrow buttons on the right to change the measurement direction for each segment.
         </p>
         <div className="space-y-2">
           {localSequence.map((item, index) => (
-            <DraggableItem
+            <SequenceItem
               key={item.id}
               item={item}
-              index={index}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
               onToggleDirection={handleToggleDirection}
+              onMove={(direction) => handleMove(index, direction)}
+              isFirst={index === 0}
+              isLast={index === localSequence.length - 1}
             />
           ))}
         </div>
