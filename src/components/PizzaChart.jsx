@@ -1,6 +1,7 @@
 // src/components/PizzaChart.jsx
 
 import React from 'react';
+import { UPPER_LEFT, LOWER_LEFT, LOWER_RIGHT } from '../chart.config';
 
 // Helper function to calculate the x, y coordinates for a point on a circle
 const getCoords = (angle, radius) => {
@@ -26,7 +27,40 @@ const getSlicePath = (sliceIndex, radius) => {
 // Add 'rotation' prop
 const PizzaChart = ({ toothId, bleedingData = {}, isMissing = false, rotation = 0 }) => {
   const radius = 20;
-  const sites = ['db', 'b', 'mb', 'ml', 'l', 'dl']; // Order of slices
+  
+  // The Pizza Chart has a fixed anatomical layout: Distal-Buccal is always the first slice.
+  // We need to map the bleeding data correctly to this fixed layout.
+  const anatomicalSites = ['db', 'b', 'mb', 'ml', 'l', 'dl'];
+
+  const getBleedingStatusForSlice = (site) => {
+    let key = site;
+    const isUpperLeft = UPPER_LEFT.includes(toothId);
+    const isLowerLeft = LOWER_LEFT.includes(toothId);
+    const isLowerRight = LOWER_RIGHT.includes(toothId);
+
+    // For Q2 (Upper Left), the buccal and lingual sides are flipped.
+    if (isUpperLeft) {
+      if (site === 'db') key = 'mb';
+      else if (site === 'mb') key = 'db';
+      else if (site === 'dl') key = 'ml';
+      else if (site === 'ml') key = 'dl';
+    }
+    
+    // For Q3 (Lower Left), only the buccal side is flipped relative to the chart's visual flow.
+    if (isLowerLeft) {
+        if (site === 'db') key = 'mb';
+        else if (site === 'mb') key = 'db';
+    }
+    
+    // For Q4 (Lower Right), only the lingual side is flipped.
+    if (isLowerRight) {
+        if (site === 'dl') key = 'ml';
+        else if (site === 'ml') key = 'dl';
+    }
+    
+    return bleedingData[key];
+  };
+
 
   if (isMissing) {
     return (
@@ -41,7 +75,6 @@ const PizzaChart = ({ toothId, bleedingData = {}, isMissing = false, rotation = 
 
   return (
     <div className="flex flex-col items-center">
-      {/* Apply rotation to the SVG element */}
       <svg
         width={radius * 2}
         height={radius * 2}
@@ -49,11 +82,11 @@ const PizzaChart = ({ toothId, bleedingData = {}, isMissing = false, rotation = 
         style={{ transform: `rotate(${rotation}deg)` }}
         className="transition-transform duration-300"
       >
-        {sites.map((site, i) => (
+        {anatomicalSites.map((site, i) => (
           <path
             key={i}
             d={getSlicePath(i, radius)}
-            fill={bleedingData[site] ? '#EF4444' : '#f3f4f6'}
+            fill={getBleedingStatusForSlice(site) ? '#EF4444' : '#f3f4f6'}
             stroke="#d1d5db"
             strokeWidth="1"
           />
