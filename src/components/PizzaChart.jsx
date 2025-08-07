@@ -1,7 +1,7 @@
 // src/components/PizzaChart.jsx
 
 import React from 'react';
-import { UPPER_LEFT, LOWER_LEFT, LOWER_RIGHT } from '../chart.config';
+import { UPPER_LEFT, LOWER_LEFT } from '../chart.config';
 
 // Helper function to calculate the x, y coordinates for a point on a circle
 const getCoords = (angle, radius) => {
@@ -24,43 +24,26 @@ const getSlicePath = (sliceIndex, radius) => {
   return `M${radius},${radius} L${start.x},${start.y} A${radius},${radius} 0 0 1 ${end.x},${end.y} Z`;
 };
 
-// Add 'rotation' prop
 const PizzaChart = ({ toothId, bleedingData = {}, isMissing = false, rotation = 0 }) => {
   const radius = 20;
-  
   // The Pizza Chart has a fixed anatomical layout: Distal-Buccal is always the first slice.
-  // We need to map the bleeding data correctly to this fixed layout.
   const anatomicalSites = ['db', 'b', 'mb', 'ml', 'l', 'dl'];
 
   const getBleedingStatusForSlice = (site) => {
     let key = site;
-    const isUpperLeft = UPPER_LEFT.includes(toothId);
-    const isLowerLeft = LOWER_LEFT.includes(toothId);
-    const isLowerRight = LOWER_RIGHT.includes(toothId);
+    const isLeftSide = UPPER_LEFT.includes(toothId) || LOWER_LEFT.includes(toothId);
 
-    // For Q2 (Upper Left), the buccal and lingual sides are flipped.
-    if (isUpperLeft) {
+    // For the left side of the mouth (Q2 and Q3), we need to flip the data keys
+    // to match the fixed visual layout of the pizza slices.
+    if (isLeftSide) {
       if (site === 'db') key = 'mb';
       else if (site === 'mb') key = 'db';
       else if (site === 'dl') key = 'ml';
       else if (site === 'ml') key = 'dl';
     }
-    
-    // For Q3 (Lower Left), only the buccal side is flipped relative to the chart's visual flow.
-    if (isLowerLeft) {
-        if (site === 'db') key = 'mb';
-        else if (site === 'mb') key = 'db';
-    }
-    
-    // For Q4 (Lower Right), only the lingual side is flipped.
-    if (isLowerRight) {
-        if (site === 'dl') key = 'ml';
-        else if (site === 'ml') key = 'dl';
-    }
-    
+
     return bleedingData[key];
   };
-
 
   if (isMissing) {
     return (
