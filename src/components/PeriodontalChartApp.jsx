@@ -8,6 +8,7 @@ import HistoryPanel from './HistoryPanel';
 import PatientInfo from './PatientInfo';
 import ChartingModeSelector from './ChartingModeSelector';
 import SequenceCustomizer from './SequenceCustomizer';
+import Dropdown from './Dropdown'; // Import the new Dropdown component
 import { createChartingOrder, INITIAL_CHART_DATA } from '../chart.config';
 
 const DEFAULT_SEQUENCE = [
@@ -43,7 +44,7 @@ export default function PeriodontalChartApp() {
     if (savedSequence) {
         setCustomSequence(JSON.parse(savedSequence));
     }
-    
+
     const savedHistory = localStorage.getItem('periodontalChartHistory');
     if (savedHistory) {
       const parsedHistory = JSON.parse(savedHistory);
@@ -57,16 +58,16 @@ export default function PeriodontalChartApp() {
       }
     }
   }, []);
-  
+
   const handleSequenceChange = (newSequence) => {
       setCustomSequence(newSequence);
       localStorage.setItem('periodontalChartSequence', JSON.stringify(newSequence));
   };
 
   const CHARTING_ORDER = useMemo(() => createChartingOrder(missingTeeth, chartingModes, customSequence), [missingTeeth, chartingModes, customSequence]);
-  
+
   const [chartingState, setChartingState] = useState({
-    isActive: false, 
+    isActive: false,
     orderIndex: 0,
   });
 
@@ -74,7 +75,7 @@ export default function PeriodontalChartApp() {
     if (!chartingState.isActive || CHARTING_ORDER.length === 0) return null;
     return CHARTING_ORDER[chartingState.orderIndex];
   }, [chartingState, CHARTING_ORDER]);
-  
+
   const handleModeChange = (event) => {
     const { value, checked } = event.target;
     setChartingModes(prev => ({ ...prev, [value]: checked }));
@@ -89,17 +90,17 @@ export default function PeriodontalChartApp() {
       toggleMissingTooth(toothId);
       return;
     }
-    
-    let orderIndex = CHARTING_ORDER.findIndex(item => 
+
+    let orderIndex = CHARTING_ORDER.findIndex(item =>
         item.toothId === toothId && item.surface === surface && item.site === site
     );
-    
+
     if (orderIndex === -1) {
-        orderIndex = CHARTING_ORDER.findIndex(item => 
+        orderIndex = CHARTING_ORDER.findIndex(item =>
             item.toothId === toothId && item.surface === surface
         );
     }
-    
+
     if (orderIndex !== -1) {
       setChartingState({ isActive: true, orderIndex });
     } else if (Object.values(chartingModes).every(m => !m)) {
@@ -227,30 +228,24 @@ export default function PeriodontalChartApp() {
               <h1 className="text-3xl font-bold text-blue-700">Periodontal Chart</h1>
             </div>
             <div className="space-x-2 flex items-center">
-                <button 
-                    onClick={() => setShowCustomizer(true)}
-                    className="px-4 py-2 rounded-lg font-semibold text-white bg-gray-700 hover:bg-gray-800 transition-colors h-10"
-                >
-                    Customize Flow
-                </button>
-                <button onClick={() => setIsEditMode(!isEditMode)} className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors h-10 ${isEditMode ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-500 hover:bg-gray-600'}`}>
-                    {isEditMode ? 'Finish Editing' : 'Remove Teeth'}
-                </button>
-                 <button onClick={handleSaveChart} className="px-4 py-2 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors h-10">
-                    Save Draft
-                </button>
-                <button onClick={handleDownload} className="px-4 py-2 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors h-10">
-                    Download
-                </button>
-                <label className="px-4 py-2 rounded-lg font-semibold text-white bg-purple-600 hover:bg-purple-700 transition-colors cursor-pointer h-10 flex items-center">
+                <Dropdown label="Save">
+                  <a href="#" onClick={handleSaveChart} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Save Draft</a>
+                  <a href="#" onClick={handleDownload} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Download</a>
+                  <label className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer">
                     Upload
                     <input type="file" accept=".json" className="hidden" onChange={handleUpload} />
-                </label>
+                  </label>
+                </Dropdown>
+
+                <Dropdown label="Settings">
+                  <a href="#" onClick={() => setShowCustomizer(true)} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Customize Flow</a>
+                  <a href="#" onClick={() => setIsEditMode(!isEditMode)} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">{isEditMode ? 'Finish Editing' : 'Remove Teeth'}</a>
+                </Dropdown>
             </div>
         </div>
-        
+
         <PatientInfo patientHN={patientHN} setPatientHN={setPatientHN} patientName={patientName} setPatientName={setPatientName} />
-        
+
         <ChartingModeSelector modes={chartingModes} onModeChange={handleModeChange} />
 
         <ToothChart data={chartData} onSiteClick={handleToothClick} activeSite={activeChartingInfo} missingTeeth={missingTeeth} isEditMode={isEditMode} />
@@ -261,7 +256,7 @@ export default function PeriodontalChartApp() {
       </div>
 
       {showCustomizer && (
-          <SequenceCustomizer 
+          <SequenceCustomizer
             sequence={customSequence}
             onSequenceChange={handleSequenceChange}
             onClose={() => setShowCustomizer(false)}
