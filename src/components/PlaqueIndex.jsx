@@ -110,13 +110,9 @@ const PlaqueIndex = () => {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2">
-                         <PlaqueIndexChart plaqueData={plaqueData} missingTeeth={missingTeeth} onToothClick={handleToothClick} isEditMode={isEditMode} />
-                    </div>
-                    <div className="lg:col-span-1">
-                        <PlaqueIndexSummary plaqueData={plaqueData} missingTeeth={missingTeeth} />
-                    </div>
+                <div className="space-y-6">
+                    <PlaqueIndexSummary plaqueData={plaqueData} missingTeeth={missingTeeth} />
+                    <PlaqueIndexChart plaqueData={plaqueData} missingTeeth={missingTeeth} onToothClick={handleToothClick} isEditMode={isEditMode} />
                 </div>
 
             </div>
