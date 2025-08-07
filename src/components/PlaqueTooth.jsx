@@ -4,11 +4,19 @@ import React from 'react';
 const PlaqueTooth = ({ toothId, toothData, isMissing, onClick, isEditMode }) => {
     const editModeClass = isEditMode ? 'relative after:absolute after:inset-0 after:bg-red-500/20 after:cursor-pointer' : '';
 
+    const handleContainerClick = () => {
+        if (isEditMode) {
+            onClick(toothId);
+        }
+    };
+    
     if (isMissing) {
         return (
-            <div className={`flex flex-col items-center gap-1 ${editModeClass}`} onClick={() => onClick(toothId)}>
-                <div className="w-10 h-10 md:w-12 md:h-12 bg-gray-300 rounded-md flex items-center justify-center">
-                    <span className="text-gray-500 text-xs select-none">Missing</span>
+            <div className={`flex flex-col items-center gap-1 ${editModeClass}`} onClick={handleContainerClick}>
+                <div className="w-full pt-[100%] relative bg-gray-300 rounded-md">
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-gray-500 text-xs select-none">Missing</span>
+                    </div>
                 </div>
                 <div className="text-xs font-mono select-none">{toothId}</div>
             </div>
@@ -16,9 +24,9 @@ const PlaqueTooth = ({ toothId, toothData, isMissing, onClick, isEditMode }) => 
     }
 
     return (
-        <div className={`flex flex-col items-center gap-1 ${editModeClass}`}>
-            <div className="w-10 h-10 md:w-12 md:h-12">
-                <svg width="100%" height="100%" viewBox="0 0 40 40" className="cursor-pointer">
+        <div className={`flex flex-col items-center gap-1 ${editModeClass}`} onClick={handleContainerClick}>
+            <div className="w-full">
+                <svg width="100%" height="100%" viewBox="0 0 40 40" className={isEditMode ? "pointer-events-none" : "cursor-pointer"}>
                     <g>
                         {/* Mesial (Top Triangle) */}
                         <path

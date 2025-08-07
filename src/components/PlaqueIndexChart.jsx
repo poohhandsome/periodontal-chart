@@ -4,7 +4,7 @@ import PlaqueTooth from './PlaqueTooth';
 import { UPPER_RIGHT_PLAQUE, UPPER_LEFT_PLAQUE, LOWER_LEFT_PLAQUE, LOWER_RIGHT_PLAQUE } from '../plaque.config';
 
 const Quadrant = ({ teeth, plaqueData, missingTeeth, onToothClick, isEditMode }) => (
-    <div className="grid grid-cols-8 gap-1">
+    <div className="grid grid-cols-8 gap-1 md:gap-2">
         {teeth.map(toothId => (
             <PlaqueTooth
                 key={toothId}

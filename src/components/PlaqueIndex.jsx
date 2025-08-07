@@ -111,8 +111,8 @@ const PlaqueIndex = () => {
                 </div>
 
                 <div className="space-y-6">
-                    <PlaqueIndexSummary plaqueData={plaqueData} missingTeeth={missingTeeth} />
                     <PlaqueIndexChart plaqueData={plaqueData} missingTeeth={missingTeeth} onToothClick={handleToothClick} isEditMode={isEditMode} />
+                    <PlaqueIndexSummary plaqueData={plaqueData} missingTeeth={missingTeeth} />
                 </div>
 
             </div>
