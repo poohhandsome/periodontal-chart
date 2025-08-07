@@ -8,7 +8,8 @@ import HistoryPanel from './HistoryPanel';
 import PatientInfo from './PatientInfo';
 import ChartingModeSelector from './ChartingModeSelector';
 import SequenceCustomizer from './SequenceCustomizer';
-import Dropdown from './Dropdown'; // Import the new Dropdown component
+import Dropdown from './Dropdown';
+import ConfirmationModal from './ConfirmationModal'; // Import the new modal
 import { createChartingOrder, INITIAL_CHART_DATA } from '../chart.config';
 
 const DEFAULT_SEQUENCE = [
@@ -22,13 +23,33 @@ const DEFAULT_SEQUENCE = [
     { id: 'Q3B', label: 'Q3 Buccal', direction: 'RL' },
 ];
 
+// Helper to get initial state from localStorage or use defaults
+const getInitialState = () => {
+    const savedState = localStorage.getItem('periodontalChartCurrentState');
+    if (savedState) {
+        try {
+            return JSON.parse(savedState);
+        } catch (e) {
+            console.error("Failed to parse saved state:", e);
+        }
+    }
+    return {
+        chartData: INITIAL_CHART_DATA,
+        missingTeeth: [],
+        patientHN: '',
+        patientName: '',
+    };
+};
+
+
 export default function PeriodontalChartApp() {
-  const [chartData, setChartData] = useState(INITIAL_CHART_DATA);
-  const [missingTeeth, setMissingTeeth] = useState([]);
+  const [initialState] = useState(getInitialState);
+  const [chartData, setChartData] = useState(initialState.chartData);
+  const [missingTeeth, setMissingTeeth] = useState(initialState.missingTeeth);
   const [isEditMode, setIsEditMode] = useState(false);
   const [history, setHistory] = useState([]);
-  const [patientHN, setPatientHN] = useState('');
-  const [patientName, setPatientName] = useState('');
+  const [patientHN, setPatientHN] = useState(initialState.patientHN);
+  const [patientName, setPatientName] = useState(initialState.patientName);
   const [chartingModes, setChartingModes] = useState({
     pd: true,
     re: true,
@@ -37,9 +58,11 @@ export default function PeriodontalChartApp() {
   });
   const [customSequence, setCustomSequence] = useState(DEFAULT_SEQUENCE);
   const [showCustomizer, setShowCustomizer] = useState(false);
+  const [isClearConfirmOpen, setClearConfirmOpen] = useState(false);
 
+
+  // Load history and sequence from localStorage on mount
   useEffect(() => {
-    // Load saved sequence from localStorage
     const savedSequence = localStorage.getItem('periodontalChartSequence');
     if (savedSequence) {
         setCustomSequence(JSON.parse(savedSequence));
@@ -58,6 +81,13 @@ export default function PeriodontalChartApp() {
       }
     }
   }, []);
+
+  // Save current state to localStorage whenever it changes
+  useEffect(() => {
+    const currentState = { chartData, missingTeeth, patientHN, patientName };
+    localStorage.setItem('periodontalChartCurrentState', JSON.stringify(currentState));
+  }, [chartData, missingTeeth, patientHN, patientName]);
+
 
   const handleSequenceChange = (newSequence) => {
       setCustomSequence(newSequence);
@@ -219,6 +249,15 @@ export default function PeriodontalChartApp() {
     }
   };
 
+  const handleClearChart = () => {
+    setChartData(INITIAL_CHART_DATA);
+    setMissingTeeth([]);
+    setPatientHN('');
+    setPatientName('');
+    setClearConfirmOpen(false);
+  };
+
+
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 p-4 font-sans">
       <div className="w-full mx-auto px-2 sm:px-4 md:px-6 pb-64">
@@ -240,6 +279,8 @@ export default function PeriodontalChartApp() {
                 <Dropdown label="Settings">
                   <button onClick={() => setShowCustomizer(true)} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Customize Flow</button>
                   <button onClick={() => setIsEditMode(!isEditMode)} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">{isEditMode ? 'Finish Editing' : 'Remove Teeth'}</button>
+                   <div className="my-1 border-t border-gray-200"></div>
+                  <button onClick={() => setClearConfirmOpen(true)} className="w-full text-left block px-4 py-2 text-sm text-red-600 hover:bg-red-50">Clear Chart</button>
                 </Dropdown>
             </div>
         </div>
@@ -272,6 +313,15 @@ export default function PeriodontalChartApp() {
           onClose={stopCharting}
         />
       )}
+
+      <ConfirmationModal
+        isOpen={isClearConfirmOpen}
+        onClose={() => setClearConfirmOpen(false)}
+        onConfirm={handleClearChart}
+        title="Clear Chart Data"
+      >
+        <p>Are you sure you want to clear all patient information and charting data? This action cannot be undone.</p>
+      </ConfirmationModal>
     </div>
   );
 }
