@@ -229,8 +229,8 @@ export default function PeriodontalChartApp() {
             </div>
             <div className="space-x-2 flex items-center">
                 <Dropdown label="Save">
-                  <a href="#" onClick={handleSaveChart} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Save Draft</a>
-                  <a href="#" onClick={handleDownload} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Download</a>
+                  <button onClick={handleSaveChart} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Save Draft</button>
+                  <button onClick={handleDownload} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Download</button>
                   <label className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer">
                     Upload
                     <input type="file" accept=".json" className="hidden" onChange={handleUpload} />
@@ -238,8 +238,8 @@ export default function PeriodontalChartApp() {
                 </Dropdown>
 
                 <Dropdown label="Settings">
-                  <a href="#" onClick={() => setShowCustomizer(true)} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Customize Flow</a>
-                  <a href="#" onClick={() => setIsEditMode(!isEditMode)} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">{isEditMode ? 'Finish Editing' : 'Remove Teeth'}</a>
+                  <button onClick={() => setShowCustomizer(true)} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Customize Flow</button>
+                  <button onClick={() => setIsEditMode(!isEditMode)} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">{isEditMode ? 'Finish Editing' : 'Remove Teeth'}</button>
                 </Dropdown>
             </div>
         </div>

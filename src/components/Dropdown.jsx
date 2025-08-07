@@ -5,10 +5,12 @@ const Dropdown = ({ label, children }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
+  const closeDropdown = () => setIsOpen(false);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
+        closeDropdown();
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -27,7 +29,7 @@ const Dropdown = ({ label, children }) => {
         <svg className={`w-4 h-4 ml-2 transition-transform duration-200 ${isOpen ? 'transform rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
       </button>
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-50 py-1">
+        <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-50 py-1" onClick={label === 'Save' ? undefined : closeDropdown}>
           {children}
         </div>
       )}
