@@ -4,7 +4,7 @@ import PlaqueIndexChart from './PlaqueIndexChart';
 import PlaqueIndexSummary from './PlaqueIndexSummary';
 import Dropdown from './Dropdown';
 import ConfirmationModal from './ConfirmationModal';
-import { INITIAL_PLAQUE_DATA } from '../plaque.config';
+import { INITIAL_PLAQUE_DATA, ALL_TEETH_PLAQUE } from '../plaque.config';
 
 const getInitialPlaqueState = () => {
     const savedState = localStorage.getItem('plaqueIndexCurrentState');
@@ -49,6 +49,19 @@ const PlaqueIndex = () => {
         setPlaqueData(INITIAL_PLAQUE_DATA);
         setMissingTeeth([]);
         setClearConfirmOpen(false);
+    };
+    
+    const handleAddAllProximal = () => {
+        setPlaqueData(prevData => {
+            const newData = JSON.parse(JSON.stringify(prevData));
+            ALL_TEETH_PLAQUE.forEach(toothId => {
+                if (!missingTeeth.includes(toothId)) {
+                    newData[toothId].m = true;
+                    newData[toothId].d = true;
+                }
+            });
+            return newData;
+        });
     };
 
     const handleDownload = () => {
@@ -95,6 +108,9 @@ const PlaqueIndex = () => {
                         <h1 className="text-3xl font-bold text-blue-700">Plaque Index (O'Leary)</h1>
                     </div>
                     <div className="space-x-2 flex items-center">
+                         <button onClick={handleAddAllProximal} className="px-4 py-2 rounded-lg font-semibold text-white bg-blue-500 hover:bg-blue-600 transition-colors h-10">
+                            Add All Proximal
+                         </button>
                          <button onClick={() => setIsEditMode(!isEditMode)} className={`px-4 py-2 rounded-lg font-semibold text-white transition-colors h-10 ${isEditMode ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-500 hover:bg-gray-600'}`}>
                             {isEditMode ? 'Finish Editing' : 'Remove Teeth'}
                         </button>
