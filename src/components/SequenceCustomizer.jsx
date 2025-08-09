@@ -10,15 +10,16 @@ const getQuadrantColor = (id) => {
     return 'bg-gray-400';
 };
 
-const SequenceItem = ({ item, onToggleDirection, onDragStart, onDragOver, onDrop, onDragEnd, isDraggedOver }) => {
+const SequenceItem = ({
+  item,
+  onToggleDirection,
+  // Pass down all event handlers for both mouse and touch
+  ...dragHandlers 
+}) => {
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
-      className={`flex items-center justify-between p-2 bg-white border rounded-lg shadow-sm transition-all duration-150 ${isDraggedOver ? 'border-blue-500 ring-2 ring-blue-300' : 'border-gray-200'}`}
+      {...dragHandlers} // Spread all handlers onto the div
+      className="flex items-center justify-between p-2 bg-white border rounded-lg shadow-sm select-none" // `select-none` helps prevent text selection
     >
         <div className="flex items-center gap-3">
             {/* Drag Handle */}
@@ -73,7 +74,9 @@ const SequenceCustomizer = ({ sequence, onSequenceChange, onClose }) => {
     );
   };
   
+  // --- UNIFIED DRAG-AND-DROP LOGIC FOR MOUSE AND TOUCH ---
   const handleDragSort = () => {
+    if (dragItem.current === null || dragOverItem.current === null) return;
     const sequenceClone = [...localSequence];
     const draggedItemContent = sequenceClone.splice(dragItem.current, 1)[0];
     sequenceClone.splice(dragOverItem.current, 0, draggedItemContent);
@@ -81,6 +84,23 @@ const SequenceCustomizer = ({ sequence, onSequenceChange, onClose }) => {
     dragOverItem.current = null;
     setLocalSequence(sequenceClone);
   };
+  
+  // --- TOUCH EVENT HANDLERS ---
+  const handleTouchStart = (index) => {
+    dragItem.current = index;
+  };
+
+  const handleTouchMove = (e, index) => {
+    // Prevent screen scrolling while dragging
+    e.preventDefault(); 
+    dragOverItem.current = index;
+  };
+  
+  // handleDragSort is called on touch end, same as on mouse drop
+  const handleTouchEnd = () => {
+    handleDragSort();
+  };
+
 
   const handleSave = () => {
     onSequenceChange(localSequence);
@@ -88,25 +108,28 @@ const SequenceCustomizer = ({ sequence, onSequenceChange, onClose }) => {
   };
 
   return (
-    // Increased z-index to z-60 to appear over the VoiceHUD (z-50)
     <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-60 flex items-center justify-center p-4">
       <div className="bg-gray-50 rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col max-h-[90vh]">
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Customize Charting Sequence</h2>
         <p className="text-sm text-gray-600 mb-4">
           Drag and drop to reorder your charting workflow. Use the arrow buttons on the right to change the measurement direction.
         </p>
-        {/* Made the list scrollable to ensure buttons are always visible */}
         <div className="space-y-2 overflow-y-auto flex-grow pr-2">
           {localSequence.map((item, index) => (
             <SequenceItem
               key={item.id}
               item={item}
               onToggleDirection={handleToggleDirection}
+              // Mouse Events
+              draggable
               onDragStart={() => (dragItem.current = index)}
               onDragEnter={() => (dragOverItem.current = index)}
               onDragEnd={handleDragSort}
               onDragOver={(e) => e.preventDefault()}
-              isDraggedOver={dragOverItem.current === index}
+              // Touch Events for iPad
+              onTouchStart={() => handleTouchStart(index)}
+              onTouchMove={(e) => handleTouchMove(e, index)}
+              onTouchEnd={handleTouchEnd}
             />
           ))}
         </div>
