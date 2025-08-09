@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import LandingPage from './pages/LandingPage';
 import PeriodontalChartPage from './pages/PeriodontalChartPage';
 import PlaqueIndexPage from './pages/PlaqueIndexPage';
+import VoicePeriodontalChartPage from './pages/VoicePeriodontalChartPage'; // Import the new page
 
 const App = () => {
     const [route, setRoute] = useState(window.location.hash);
@@ -21,6 +22,8 @@ const App = () => {
                 return <PeriodontalChartPage />;
             case '#/plaque-index':
                 return <PlaqueIndexPage />;
+            case '#/voice-periodontal-chart': // Add the new route
+                return <VoicePeriodontalChartPage />;
             default:
                 return <LandingPage />;
         }

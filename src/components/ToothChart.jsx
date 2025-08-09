@@ -2,16 +2,14 @@
 
 import React from 'react';
 import Tooth from './Tooth';
-// The DirectionPointer component is no longer needed.
-// import DirectionPointer from './DirectionPointer'; 
 import { UPPER_RIGHT, UPPER_LEFT, LOWER_LEFT, LOWER_RIGHT } from '../chart.config';
 
 // Renders a cell with 3 data points, now with highlighting for PD >= 4mm
 const DataCell = ({ values, field }) => (
   <div className="flex-1 h-6 flex justify-around items-center text-xs font-mono border-r border-gray-200 last:border-r-0">
     {values.map((val, i) => (
-      <span 
-        key={i} 
+      <span
+        key={i}
         className={`flex-1 text-center ${
           field === 'pd' && val >= 4 ? 'text-red-500 font-bold' : ''
         }`}
@@ -29,29 +27,38 @@ const MGJDataCell = ({ value }) => (
     </div>
 );
 
-// Renders a full row for PD or RE data, passing the 'field' down to DataCell
-const DataRow = ({ teeth, data, field, siteKeys, label, missingTeeth=[] }) => (
-  <div className="flex items-center">
-    <div className="w-10 text-right pr-2 text-blue-600 font-semibold text-xs">{label}</div>
-    <div className="flex-1 flex bg-gray-50 border border-gray-200 rounded-sm">
-      <div className="flex flex-1">
-        {teeth.slice(0, 8).map(toothId => 
-          missingTeeth.includes(toothId) 
-            ? <div key={toothId} className="flex-1 border-r border-gray-200"></div> 
-            : <DataCell key={`${toothId}-${field}`} values={siteKeys.map(site => data[toothId]?.[field]?.[site])} field={field} />
-        )}
-      </div>
-      <div className="w-4 bg-white"></div>
-      <div className="flex flex-1">
-        {teeth.slice(8).map(toothId => 
-          missingTeeth.includes(toothId) 
-            ? <div key={toothId} className="flex-1 border-r border-gray-200"></div> 
-            : <DataCell key={`${toothId}-${field}`} values={siteKeys.map(site => data[toothId]?.[field]?.[site])} field={field} />
-        )}
-      </div>
-    </div>
-  </div>
-);
+// --- THIS COMPONENT IS NOW FIXED ---
+const DataRow = ({ teeth, data, field, siteKeys, label, missingTeeth=[] }) => {
+    // Helper to determine if a tooth is on the left side of the arch
+    const isLeftSideTooth = (toothId) => UPPER_LEFT.includes(toothId) || LOWER_LEFT.includes(toothId);
+
+    return (
+        <div className="flex items-center">
+            <div className="w-10 text-right pr-2 text-blue-600 font-semibold text-xs">{label}</div>
+            <div className="flex-1 flex bg-gray-50 border border-gray-200 rounded-sm">
+                <div className="flex flex-1">
+                    {teeth.slice(0, 8).map(toothId => {
+                        // THE FIX: Reverse siteKeys for left-side teeth before mapping data
+                        const displaySiteKeys = isLeftSideTooth(toothId) ? [...siteKeys].reverse() : siteKeys;
+                        return missingTeeth.includes(toothId)
+                            ? <div key={toothId} className="flex-1 border-r border-gray-200"></div>
+                            : <DataCell key={`${toothId}-${field}`} values={displaySiteKeys.map(site => data[toothId]?.[field]?.[site])} field={field} />
+                    })}
+                </div>
+                <div className="w-4 bg-white"></div>
+                <div className="flex flex-1">
+                    {teeth.slice(8).map(toothId => {
+                        // THE FIX: Also applied here for the other half of the arch
+                        const displaySiteKeys = isLeftSideTooth(toothId) ? [...siteKeys].reverse() : siteKeys;
+                        return missingTeeth.includes(toothId)
+                            ? <div key={toothId} className="flex-1 border-r border-gray-200"></div>
+                            : <DataCell key={`${toothId}-${field}`} values={displaySiteKeys.map(site => data[toothId]?.[field]?.[site])} field={field} />
+                    })}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 // New component specifically for the MGJ data row
 const MGJDataRow = ({ teeth, data, label, missingTeeth=[] }) => (
@@ -59,18 +66,18 @@ const MGJDataRow = ({ teeth, data, label, missingTeeth=[] }) => (
         <div className="w-10 text-right pr-2 text-blue-600 font-semibold text-xs">{label}</div>
         <div className="flex-1 flex bg-gray-50 border border-gray-200 rounded-sm">
             <div className="flex flex-1">
-                {teeth.slice(0, 8).map(toothId => 
-                    missingTeeth.includes(toothId) 
-                        ? <div key={toothId} className="flex-1 border-r border-gray-200"></div> 
-                        : <MGJDataCell key={`${toothId}-mgj`} value={data[toothId]?.mgj?.b} /> 
+                {teeth.slice(0, 8).map(toothId =>
+                    missingTeeth.includes(toothId)
+                        ? <div key={toothId} className="flex-1 border-r border-gray-200"></div>
+                        : <MGJDataCell key={`${toothId}-mgj`} value={data[toothId]?.mgj?.b} />
                 )}
             </div>
             <div className="w-4 bg-white"></div>
             <div className="flex flex-1">
-                 {teeth.slice(8).map(toothId => 
-                    missingTeeth.includes(toothId) 
-                        ? <div key={toothId} className="flex-1 border-r border-gray-200"></div> 
-                        : <MGJDataCell key={`${toothId}-mgj`} value={data[toothId]?.mgj?.b} /> 
+                 {teeth.slice(8).map(toothId =>
+                    missingTeeth.includes(toothId)
+                        ? <div key={toothId} className="flex-1 border-r border-gray-200"></div>
+                        : <MGJDataCell key={`${toothId}-mgj`} value={data[toothId]?.mgj?.b} />
                 )}
             </div>
         </div>
@@ -81,9 +88,6 @@ const MGJDataRow = ({ teeth, data, label, missingTeeth=[] }) => (
 const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode }) => {
   const buccalSites = ['db', 'b', 'mb'];
   const lingualSites = ['dl', 'l', 'ml'];
-
-  // The logic for the direction pointer has been removed.
-  // const activeSegmentInfo = useMemo(() => { ... });
 
   const renderQuadrant = (teeth, surface, arch) => (
     <div className="flex flex-1">
@@ -104,9 +108,6 @@ const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode })
     </div>
   );
   
-  // The function to render the pointer has been removed.
-  // const renderPointer = (arch, surface) => { ... };
-
   return (
     <div className="bg-white p-4 rounded-xl shadow-lg">
       <div className="space-y-3">
@@ -115,7 +116,6 @@ const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode })
           <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="pd" siteKeys={buccalSites} label="PD" missingTeeth={missingTeeth}/>
           <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="re" siteKeys={buccalSites} label="RE" missingTeeth={missingTeeth}/>
           <MGJDataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} label="MGJ" missingTeeth={missingTeeth}/>
-          {/* The div that held the pointer is now just for spacing */}
           <div className="h-2"></div>
           <div className="flex justify-center items-center">
             <div className="w-10"></div>

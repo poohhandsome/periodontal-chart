@@ -1,19 +1,23 @@
 // src/pages/LandingPage.jsx
 import React from 'react';
 
-const ToolCard = ({ title, description, href, icon }) => (
+const ToolCard = ({ title, description, href, icon, isBeta = false }) => (
     <a href={href} className="group block p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300">
         <div className="flex items-center gap-4">
             <div className="text-blue-500 bg-blue-100 p-3 rounded-full">
                 {icon}
             </div>
             <div>
-                <h3 className="text-2xl font-bold text-gray-800 group-hover:text-blue-600">{title}</h3>
+                <h3 className="text-2xl font-bold text-gray-800 group-hover:text-blue-600">
+                    {title}
+                    {isBeta && <span className="ml-2 text-xs font-semibold text-white bg-blue-500 px-2 py-1 rounded-full">BETA</span>}
+                </h3>
                 <p className="text-gray-600 mt-1">{description}</p>
             </div>
         </div>
     </a>
 );
+
 
 const LandingPage = () => {
     const PeriodontalIcon = () => (
@@ -23,6 +27,11 @@ const LandingPage = () => {
     const PlaqueIcon = () => (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>
     );
+    
+    const VoiceIcon = () => (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+    );
+
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -39,19 +48,29 @@ const LandingPage = () => {
                 <p className="text-lg text-gray-600 text-center mt-2 mb-10">Select a tool to begin.</p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-                    <ToolCard 
-                        title="Periodontal Chart" 
+                    <ToolCard
+                        title="Periodontal Chart"
                         description="Comprehensive periodontal charting and analysis."
                         href="#/periodontal-chart"
                         icon={<PeriodontalIcon />}
                     />
-                    <ToolCard 
-                        title="Plaque Index" 
+                    <ToolCard
+                        title="Plaque Index"
                         description="Record and score plaque levels (O'Leary)."
                         href="#/plaque-index"
                         icon={<PlaqueIcon />}
                     />
+                    <div className="md:col-span-2">
+                        <ToolCard
+                            title="Voice-Controlled Periodontal Chart"
+                            description="Hands-free charting using Thai voice commands."
+                            href="#/voice-periodontal-chart"
+                            icon={<VoiceIcon />}
+                            isBeta={true}
+                        />
+                    </div>
                 </div>
+
 
                 <div className="text-center mt-16">
                     <h3 className="text-xl font-semibold text-gray-700">More modules coming soon...</h3>

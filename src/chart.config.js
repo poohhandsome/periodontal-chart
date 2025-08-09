@@ -7,6 +7,16 @@ export const LOWER_LEFT = [31, 32, 33, 34, 35, 36, 37, 38];
 
 export const ALL_TEETH = [...UPPER_RIGHT, ...UPPER_LEFT, ...LOWER_RIGHT.slice().reverse(), ...LOWER_LEFT];
 
+// --- NEW EXPORT FOR MGJ MODE ---
+// Defines the standard order for buccal MGJ measurements
+export const MGJ_CHARTING_TEETH = [...UPPER_RIGHT, ...UPPER_LEFT, ...LOWER_LEFT, ...LOWER_RIGHT.slice().reverse()];
+export const MGJ_CHARTING_QUADRANTS = [
+    UPPER_RIGHT,
+    UPPER_LEFT,
+    LOWER_LEFT,
+    LOWER_RIGHT.slice().reverse(),
+];
+
 const BUCCAL_SITES_LR = ['db', 'b', 'mb'];
 const LINGUAL_SITES_LR = ['dl', 'l', 'ml'];
 const BUCCAL_SITES_RL = ['mb', 'b', 'db'];
@@ -19,7 +29,6 @@ export const INITIAL_CHART_DATA = ALL_TEETH.reduce((acc, toothId) => {
   return acc;
 }, {});
 
-// Maps sequence IDs to their corresponding tooth arrays and surfaces.
 const SEQUENCE_MAP = {
     Q1B: { teeth: UPPER_RIGHT, surface: 'buccal' },
     Q1L: { teeth: UPPER_RIGHT, surface: 'lingual' },
@@ -38,48 +47,64 @@ export const createChartingOrder = (missingTeeth = [], modes = {}, customSequenc
 
   customSequence.forEach(segment => {
     const { teeth: baseTeeth, surface } = SEQUENCE_MAP[segment.id];
-    const quadrant = segment.id.substring(0, 2); // 'Q1', 'Q2', etc.
+    const quadrant = segment.id.substring(0, 2);
+    const isDirectionReversed = segment.direction === 'RL';
+    const teeth = availableTeeth(isDirectionReversed ? [...baseTeeth].reverse() : baseTeeth);
+    const isQuadrantOnLeftSide = quadrant === 'Q2' || quadrant === 'Q3';
+    const useEffectiveRLProbingOrder = isDirectionReversed ^ isQuadrantOnLeftSide;
 
-    // Determine the direction for TEETH based on user's custom sequence
-    const isReversedForTeeth = segment.direction === 'RL';
-    const teeth = availableTeeth(isReversedForTeeth ? [...baseTeeth].reverse() : baseTeeth);
-
-    // Determine the site order for PROBING (PD, RE) based on user's custom sequence direction
     let sitesForProbing;
     if (surface === 'buccal') {
-        sitesForProbing = isReversedForTeeth ? BUCCAL_SITES_RL : BUCCAL_SITES_LR;
-    } else { // lingual
-        sitesForProbing = isReversedForTeeth ? LINGUAL_SITES_RL : LINGUAL_SITES_LR;
+        sitesForProbing = useEffectiveRLProbingOrder ? BUCCAL_SITES_RL : BUCCAL_SITES_LR;
+    } else {
+        sitesForProbing = useEffectiveRLProbingOrder ? LINGUAL_SITES_RL : LINGUAL_SITES_LR;
     }
 
-    // Determine the site order for the BOP BUTTONS based on ANATOMY (screen position)
-    // Q2 and Q3 are on the left side of the screen, so their mesial side is towards the center (right).
-    const isQuadrantOnLeftSide = quadrant === 'Q2' || quadrant === 'Q3';
     let sitesForBopButtons;
     if (surface === 'buccal') {
       sitesForBopButtons = isQuadrantOnLeftSide ? BUCCAL_SITES_RL : BUCCAL_SITES_LR;
-    } else { // lingual
+    } else {
       sitesForBopButtons = isQuadrantOnLeftSide ? LINGUAL_SITES_RL : LINGUAL_SITES_LR;
     }
 
     teeth.forEach(toothId => {
-      // Create order for PD, RE using the probing site order
       sitesForProbing.forEach(site => {
         siteModes.forEach(mode => {
           order.push({ toothId, surface, site, type: mode });
         });
       });
-
       if (modes.bop) {
-        // Create order for BOP using the ANATOMICALLY correct button order
         order.push({ toothId, surface, sites: sitesForBopButtons, type: 'bop' });
       }
-
       if (modes.mgj && surface === 'buccal') {
         order.push({ toothId, surface, site: 'b', type: 'mgj' });
       }
     });
   });
+  return order;
+};
 
+export const createVoiceChartingOrder = (missingTeeth = [], customSequence = []) => {
+  const order = [];
+  const availableTeeth = (teeth) => teeth.filter(t => !missingTeeth.includes(t));
+  customSequence.forEach(segment => {
+    const { teeth: baseTeeth, surface } = SEQUENCE_MAP[segment.id];
+    const isReversed = segment.direction === 'RL';
+    const processableTeeth = availableTeeth(isReversed ? [...baseTeeth].reverse() : baseTeeth);
+    let sitesForSurface;
+    if (surface === 'buccal') {
+      sitesForSurface = isReversed ? BUCCAL_SITES_RL : BUCCAL_SITES_LR;
+    } else {
+      sitesForSurface = isReversed ? LINGUAL_SITES_RL : LINGUAL_SITES_LR;
+    }
+    processableTeeth.forEach(toothId => {
+      order.push({
+        toothId,
+        surface,
+        sites: sitesForSurface,
+        type: 'pd/re',
+      });
+    });
+  });
   return order;
 };
