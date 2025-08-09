@@ -108,65 +108,71 @@ const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode })
     </div>
   );
   
-  return (
+ return (
     <div className="bg-white p-4 rounded-xl shadow-lg">
       <div className="space-y-3">
-        {/* === MAXILLARY (UPPER) ARCH === */}
-        <div className="space-y-1">
-          <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="pd" siteKeys={buccalSites} label="PD" missingTeeth={missingTeeth}/>
-          <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="re" siteKeys={buccalSites} label="RE" missingTeeth={missingTeeth}/>
-          <MGJDataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} label="MGJ" missingTeeth={missingTeeth}/>
-          <div className="h-2"></div>
-          <div className="flex justify-center items-center">
-            <div className="w-10"></div>
-            <div className="flex-1 flex">
-              {renderQuadrant(UPPER_RIGHT, 'buccal', 'upper')}
-              <div className="w-4 h-28 self-center"></div>
-              {renderQuadrant(UPPER_LEFT, 'buccal', 'upper')}
+        {/* --- ADDED ID FOR UPPER ARCH --- */}
+        <div id="pdf-upper-arch">
+          {/* === MAXILLARY (UPPER) ARCH === */}
+          <div className="space-y-1">
+            <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="pd" siteKeys={buccalSites} label="PD" missingTeeth={missingTeeth}/>
+            <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="re" siteKeys={buccalSites} label="RE" missingTeeth={missingTeeth}/>
+            <MGJDataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} label="MGJ" missingTeeth={missingTeeth}/>
+            <div className="h-2"></div>
+            <div className="flex justify-center items-center">
+              <div className="w-10"></div>
+              <div className="flex-1 flex">
+                {renderQuadrant(UPPER_RIGHT, 'buccal', 'upper')}
+                <div className="w-4 h-28 self-center"></div>
+                {renderQuadrant(UPPER_LEFT, 'buccal', 'upper')}
+              </div>
             </div>
           </div>
-        </div>
-        <div className="space-y-1 pt-3 border-t-4 border-gray-200">
-          <div className="h-2"></div>
-          <div className="flex justify-center items-center">
-             <div className="w-10"></div>
-             <div className="flex-1 flex">
-                {renderQuadrant(UPPER_RIGHT, 'lingual', 'upper')}
-                <div className="w-4 h-28 self-center"></div>
-                {renderQuadrant(UPPER_LEFT, 'lingual', 'upper')}
-             </div>
+          <div className="space-y-1 pt-3 border-t-4 border-gray-200">
+            <div className="h-2"></div>
+            <div className="flex justify-center items-center">
+               <div className="w-10"></div>
+               <div className="flex-1 flex">
+                  {renderQuadrant(UPPER_RIGHT, 'lingual', 'upper')}
+                  <div className="w-4 h-28 self-center"></div>
+                  {renderQuadrant(UPPER_LEFT, 'lingual', 'upper')}
+               </div>
+            </div>
+            <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="pd" siteKeys={lingualSites} label="PD" missingTeeth={missingTeeth}/>
+            <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="re" siteKeys={lingualSites} label="RE" missingTeeth={missingTeeth}/>
           </div>
-          <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="pd" siteKeys={lingualSites} label="PD" missingTeeth={missingTeeth}/>
-          <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="re" siteKeys={lingualSites} label="RE" missingTeeth={missingTeeth}/>
         </div>
 
-        {/* === MANDIBULAR (LOWER) ARCH === */}
-        <div className="space-y-1 pt-6 border-t-8 border-gray-200">
-            <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="pd" siteKeys={lingualSites} label="PD" missingTeeth={missingTeeth}/>
-            <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="re" siteKeys={lingualSites} label="RE" missingTeeth={missingTeeth}/>
-            <div className="h-2"></div>
-            <div className="flex justify-center items-center">
-                <div className="w-10"></div>
-                <div className="flex-1 flex">
-                    {renderQuadrant(LOWER_RIGHT, 'lingual', 'lower')}
-                    <div className="w-4 h-28 self-center"></div>
-                    {renderQuadrant(LOWER_LEFT, 'lingual', 'lower')}
-                </div>
-            </div>
-        </div>
-        <div className="space-y-1 pt-3 border-t-4 border-gray-200">
-            <div className="h-2"></div>
-            <div className="flex justify-center items-center">
-                <div className="w-10"></div>
-                <div className="flex-1 flex">
-                    {renderQuadrant(LOWER_RIGHT, 'buccal', 'lower')}
-                    <div className="w-4 h-28 self-center"></div>
-                    {renderQuadrant(LOWER_LEFT, 'buccal', 'lower')}
-                </div>
-            </div>
-            <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="pd" siteKeys={buccalSites} label="PD" missingTeeth={missingTeeth}/>
-            <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="re" siteKeys={buccalSites} label="RE" missingTeeth={missingTeeth}/>
-            <MGJDataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} label="MGJ" missingTeeth={missingTeeth}/>
+        {/* --- ADDED ID FOR LOWER ARCH --- */}
+        <div id="pdf-lower-arch" className="pt-6 border-t-8 border-gray-200">
+          {/* === MANDIBULAR (LOWER) ARCH === */}
+          <div className="space-y-1">
+              <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="pd" siteKeys={lingualSites} label="PD" missingTeeth={missingTeeth}/>
+              <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="re" siteKeys={lingualSites} label="RE" missingTeeth={missingTeeth}/>
+              <div className="h-2"></div>
+              <div className="flex justify-center items-center">
+                  <div className="w-10"></div>
+                  <div className="flex-1 flex">
+                      {renderQuadrant(LOWER_RIGHT, 'lingual', 'lower')}
+                      <div className="w-4 h-28 self-center"></div>
+                      {renderQuadrant(LOWER_LEFT, 'lingual', 'lower')}
+                  </div>
+              </div>
+          </div>
+          <div className="space-y-1 pt-3 border-t-4 border-gray-200">
+              <div className="h-2"></div>
+              <div className="flex justify-center items-center">
+                  <div className="w-10"></div>
+                  <div className="flex-1 flex">
+                      {renderQuadrant(LOWER_RIGHT, 'buccal', 'lower')}
+                      <div className="w-4 h-28 self-center"></div>
+                      {renderQuadrant(LOWER_LEFT, 'buccal', 'lower')}
+                  </div>
+              </div>
+              <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="pd" siteKeys={buccalSites} label="PD" missingTeeth={missingTeeth}/>
+              <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="re" siteKeys={buccalSites} label="RE" missingTeeth={missingTeeth}/>
+              <MGJDataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} label="MGJ" missingTeeth={missingTeeth}/>
+          </div>
         </div>
       </div>
     </div>
