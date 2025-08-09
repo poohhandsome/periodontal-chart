@@ -1,6 +1,7 @@
 // src/components/VoiceHUD.jsx
 import React from 'react';
 
+// A small component for the preview data boxes
 const DataBox = ({ label, value }) => (
     <div className="flex flex-col items-center">
         <span className="text-[10px] font-semibold text-gray-500 uppercase">{label}</span>
@@ -9,6 +10,7 @@ const DataBox = ({ label, value }) => (
         </div>
     </div>
 );
+
 
 const VoiceHUD = ({
   isListening,
@@ -19,15 +21,16 @@ const VoiceHUD = ({
   previewData,
   onConfirm,
   onCancel,
-  chartingMode, // New prop
-  mgjData,      // New prop { collected, total }
+  chartingMode,
+  mgjData,
+  onClose, // New prop for the close handler
 }) => {
   const hasPreview = !!previewData;
 
   let statusText = "Press mic or select a tooth to start.";
   if (chartingMode === 'MGJ') {
     statusText = `Ready for MGJ Q${mgjData.quadrant}. (${mgjData.total} values)`;
-    if (isListening) statusText = `Listening for MGJ Q${mgjData.quadrant}... (${mgjData.collected} / ${mgjData.total})`;
+    if (isListening) statusText = `Listening for MGJ Q${mgjData.quadrant}... (${mgjData.collected} / ${mgData.total})`;
   } else { // PD_RE Mode
     if (activeInfo && !isListening) statusText = `Ready to record.`;
     if (isListening) statusText = `Listening...`;
@@ -40,8 +43,20 @@ const VoiceHUD = ({
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm border-t border-gray-200 p-6 z-50">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto relative">
+        {/* --- NEW CLOSE BUTTON --- */}
+        <button
+            onClick={onClose}
+            className="absolute -top-2 right-0 text-gray-400 hover:text-gray-700"
+            title="Close Voice Panel"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+
         <div className="flex items-center gap-6">
+          {/* Microphone Button */}
           <button
             type="button"
             onClick={onToggleMic}
@@ -54,8 +69,8 @@ const VoiceHUD = ({
             </svg>
           </button>
           
-          {/* PD & RE Mode Display */}
-          {chartingMode === 'PD_RE' && activeInfo && !hasPreview && (
+          {/* Active Tooth Display & Data Grid */}
+          {activeInfo && chartingMode === 'PD_RE' && (
              <div className="flex items-start gap-4 border-r pr-6 mr-6">
                 <div className="text-center">
                     <p className="text-xs text-gray-500">Active Tooth</p>
@@ -82,6 +97,7 @@ const VoiceHUD = ({
             </div>
           )}
 
+          {/* Status, Transcript, and Confirmation */}
           <div className="flex-grow">
             <p className={`text-sm font-semibold ${error ? 'text-red-600' : 'text-gray-600'}`}>
               {statusText}

@@ -8,7 +8,7 @@ import Dropdown from './Dropdown';
 import ConfirmationModal from './ConfirmationModal';
 import VoiceHUD from './VoiceHUD';
 import HistoryPanel from './HistoryPanel';
-import SequenceCustomizer from './SequenceCustomizer'; // Import the customizer
+import SequenceCustomizer from './SequenceCustomizer';
 import { useSpeechEngine } from '../hooks/useSpeechEngine';
 import { useChartStateMachine } from '../hooks/useChartStateMachine';
 import { thaiNormalize, thaiNumberParser } from '../utils/thai-language-utils';
@@ -46,11 +46,12 @@ export default function VoiceControlledPeriodontalChartApp() {
   const [isClearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [history, setHistory] = useState([]);
-  const [chartingMode, setChartingMode] = useState('PD_RE');
+  const [chartingMode, setChartingMode] = useState(null); // Start with no mode selected
+  const [isHudVisible, setIsHudVisible] = useState(false); // New state to control HUD visibility
   const [mgjValues, setMgjValues] = useState([]);
   const [mgjQuadrantIndex, setMgjQuadrantIndex] = useState(0);
-  const [customSequence, setCustomSequence] = useState(DEFAULT_SEQUENCE); // State for the sequence
-  const [showCustomizer, setShowCustomizer] = useState(false); // State to show/hide the modal
+  const [customSequence, setCustomSequence] = useState(DEFAULT_SEQUENCE);
+  const [showCustomizer, setShowCustomizer] = useState(false);
 
   useEffect(() => {
     const currentState = { chartData, missingTeeth, patientHN, patientName };
@@ -61,7 +62,6 @@ export default function VoiceControlledPeriodontalChartApp() {
     const savedHistory = localStorage.getItem('periodontalChartHistory');
     if (savedHistory) setHistory(JSON.parse(savedHistory));
     
-    // Load the shared custom sequence
     const savedSequence = localStorage.getItem('periodontalChartSequence');
     if (savedSequence) setCustomSequence(JSON.parse(savedSequence));
   }, []);
@@ -69,7 +69,7 @@ export default function VoiceControlledPeriodontalChartApp() {
   const stateMachineConfig = {
     missingTeeth,
     customChartingOrderFunction: createVoiceChartingOrder, 
-    customSequence: customSequence, // Use the state variable
+    customSequence: customSequence,
   };
   const { activeInfo, dispatch } = useChartStateMachine(stateMachineConfig);
 
@@ -117,7 +117,8 @@ export default function VoiceControlledPeriodontalChartApp() {
         startSpeech();
       } else {
         alert("MGJ recording complete!");
-        setChartingMode('PD_RE');
+        setChartingMode(null);
+        setIsHudVisible(false); // Close HUD on completion
         setMgjQuadrantIndex(0);
         setMgjValues([]);
         stopSpeech();
@@ -177,6 +178,7 @@ export default function VoiceControlledPeriodontalChartApp() {
       setMissingTeeth(prev => prev.includes(toothId) ? prev.filter(t => t !== toothId) : [...prev, toothId]);
       return;
     }
+    setIsHudVisible(true); // Show HUD if a tooth is selected
     dispatch({ type: 'SET_POSITION', payload: { toothId, surface } });
   };
 
@@ -198,10 +200,17 @@ export default function VoiceControlledPeriodontalChartApp() {
   const handleModeChange = (mode) => {
     if (isListening) stopSpeech();
     setChartingMode(mode);
+    setIsHudVisible(true); // Show the HUD when a mode is selected
     setMgjValues([]);
     setMgjQuadrantIndex(0);
     setPreviewData(null);
     setTranscript('');
+  };
+
+  const handleCloseHud = () => {
+    if (isListening) stopSpeech();
+    setIsHudVisible(false);
+    setChartingMode(null); // Reset the mode
   };
   
   const handleClearChart = () => {
@@ -280,7 +289,6 @@ export default function VoiceControlledPeriodontalChartApp() {
     }
   };
   
-  // --- NEW FUNCTION TO HANDLE SEQUENCE CHANGES ---
   const handleSequenceChange = (newSequence) => {
       setCustomSequence(newSequence);
       localStorage.setItem('periodontalChartSequence', JSON.stringify(newSequence));
@@ -304,7 +312,6 @@ export default function VoiceControlledPeriodontalChartApp() {
                   </label>
                 </Dropdown>
                 <Dropdown label="Settings">
-                  {/* --- NEW CUSTOMIZE FLOW BUTTON --- */}
                   <button onClick={() => setShowCustomizer(true)} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Customize Flow</button>
                   <button onClick={() => setIsEditMode(!isEditMode)} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">{isEditMode ? 'Finish Editing' : 'Remove Teeth'}</button>
                    <div className="my-1 border-t border-gray-200"></div>
@@ -317,6 +324,7 @@ export default function VoiceControlledPeriodontalChartApp() {
         
         <div className="mb-4 bg-white p-4 rounded-xl shadow-lg">
             <h3 className="text-lg font-semibold text-gray-800 mb-2">Charting Mode</h3>
+            <p className="text-sm text-gray-500 mb-3">Select a mode to begin voice charting.</p>
             <div className="flex gap-4">
                 <button onClick={() => handleModeChange('PD_RE')} disabled={isListening} className={`px-4 py-2 rounded-lg font-semibold transition-colors disabled:opacity-50 ${chartingMode === 'PD_RE' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}>
                     PD & RE (Per Tooth)
@@ -340,7 +348,6 @@ export default function VoiceControlledPeriodontalChartApp() {
         <HistoryPanel history={history} onLoad={handleLoadChart} onDelete={handleDeleteChart} />
       </div>
 
-      {/* --- NEW SEQUENCE CUSTOMIZER MODAL --- */}
       {showCustomizer && (
           <SequenceCustomizer
             sequence={customSequence}
@@ -349,22 +356,25 @@ export default function VoiceControlledPeriodontalChartApp() {
           />
       )}
 
-      <VoiceHUD
-        isListening={isListening}
-        transcript={chartingMode === 'MGJ' ? mgjValues.join(' ') : transcript}
-        error={error}
-        activeInfo={activeInfo}
-        onToggleMic={handleToggleMic}
-        previewData={previewData}
-        onConfirm={handleConfirmPreview}
-        onCancel={handleCancelPreview}
-        chartingMode={chartingMode}
-        mgjData={{ 
-            quadrant: mgjQuadrantIndex + 1,
-            collected: mgjValues.length, 
-            total: currentMgjQuadrantTeeth.length 
-        }}
-      />
+      {isHudVisible && (
+        <VoiceHUD
+            isListening={isListening}
+            transcript={chartingMode === 'MGJ' ? mgjValues.join(' ') : transcript}
+            error={error}
+            activeInfo={activeInfo}
+            onToggleMic={handleToggleMic}
+            previewData={previewData}
+            onConfirm={handleConfirmPreview}
+            onCancel={handleCancelPreview}
+            onClose={handleCloseHud} // Pass the close handler
+            chartingMode={chartingMode}
+            mgjData={{ 
+                quadrant: mgjQuadrantIndex + 1,
+                collected: mgjValues.length, 
+                total: currentMgjQuadrantTeeth.length 
+            }}
+        />
+      )}
 
       <ConfirmationModal
         isOpen={isClearConfirmOpen}
