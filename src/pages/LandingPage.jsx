@@ -36,9 +36,11 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
         <header className="bg-white shadow-md">
-            <div className="container mx-auto px-6 py-4">
-                <h1 className="text-3xl font-bold text-blue-700">EasyPerio</h1>
-                <p className="text-gray-500">by pooh</p>
+            <div className="container mx-auto px-6 py-4 flex justify-between items-center">
+                <div>
+                    <h1 className="text-3xl font-bold text-blue-700">EasyPerio</h1>
+                    <p className="text-gray-500">by pooh</p>
+                </div>
             </div>
         </header>
 
@@ -81,9 +83,20 @@ const LandingPage = () => {
 
         <footer className="bg-white mt-auto">
             <div className="container mx-auto px-6 py-4 text-center text-gray-500">
-                &copy; 2024 EasyPerio. All Rights Reserved.
+                &copy; 2025 EasyPerio. All Rights Reserved.
             </div>
         </footer>
+
+        {/* --- NEW QR DONATE BUTTON --- */}
+        <a 
+            href="#/qr-donate"
+            className="fixed bottom-6 right-6 bg-white p-3 rounded-full shadow-lg hover:shadow-xl transform hover:scale-110 transition-all duration-200"
+            title="Donate via QR Code"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+        </a>
     </div>
   );
 };
