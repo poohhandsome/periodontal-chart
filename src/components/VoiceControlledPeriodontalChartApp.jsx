@@ -1,10 +1,8 @@
 // src/components/VoiceControlledPeriodontalChartApp.jsx
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-
-import { exportChartAsPdf } from '../utils/pdf-exporter'; // Import the new exporter
+import { exportChartAsPdf } from '../utils/pdf-exporter';
 import ToothChart from './ToothChart';
-
 import ChartSummary from './ChartSummary';
 import PatientInfo from './PatientInfo';
 import Dropdown from './Dropdown';
@@ -12,6 +10,7 @@ import ConfirmationModal from './ConfirmationModal';
 import VoiceHUD from './VoiceHUD';
 import HistoryPanel from './HistoryPanel';
 import SequenceCustomizer from './SequenceCustomizer';
+import EditDataModal from './EditDataModal';
 import { useSpeechEngine } from '../hooks/useSpeechEngine';
 import { useChartStateMachine } from '../hooks/useChartStateMachine';
 import { thaiNormalize, thaiNumberParser } from '../utils/thai-language-utils';
@@ -25,7 +24,7 @@ const DEFAULT_SEQUENCE = [
     { id: 'Q3L', label: 'Q3 Lingual', direction: 'RL' }, { id: 'Q4L', label: 'Q4 Lingual', direction: 'LR' },
     { id: 'Q4B', label: 'Q4 Buccal', direction: 'LR' }, { id: 'Q3B', label: 'Q3 Buccal', direction: 'RL' },
 ];
-const CONFIRM_KEYWORDS = ['ok', 'okay', 'ตกลง', 'โอเค', 'ยืนยัน', 'ต่อไป'];
+const CONFIRM_KEYWORDS = ['ok', 'okay', 'ตกลง', 'โอเค', 'ยืนัน', 'ต่อไป'];
 const CANCEL_KEYWORDS = ['cancel', 'ยกเลิก'];
 const STOP_KEYWORDS = ['จบ', 'หยุด'];
 
@@ -55,6 +54,7 @@ export default function VoiceControlledPeriodontalChartApp() {
   const [mgjQuadrantIndex, setMgjQuadrantIndex] = useState(0);
   const [customSequence, setCustomSequence] = useState(DEFAULT_SEQUENCE);
   const [showCustomizer, setShowCustomizer] = useState(false);
+  const [editingTooth, setEditingTooth] = useState(null);
 
   useEffect(() => {
     const currentState = { chartData, missingTeeth, patientHN, patientName };
@@ -296,48 +296,24 @@ export default function VoiceControlledPeriodontalChartApp() {
       localStorage.setItem('periodontalChartSequence', JSON.stringify(newSequence));
   };
 
-  const handleExportPdf = async () => {
-    const patientInfo = document.getElementById('patient-info-pdf');
-    const toothChart = document.getElementById('tooth-chart-pdf');
-    const chartSummary = document.getElementById('chart-summary-pdf');
+  const handleOpenEditModal = (toothId, surface) => {
+    setEditingTooth({
+        id: toothId,
+        surface: surface,
+        data: chartData[toothId]
+    });
+  };
 
-    if (!patientInfo || !toothChart || !chartSummary) {
-        alert("Could not find all elements to export.");
-        return;
-    }
+  const handleCloseEditModal = () => {
+    setEditingTooth(null);
+  };
 
-    const pdf = new jsPDF('p', 'mm', 'a4', true);
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    
-    // 1. Add Patient Info
-    const patientCanvas = await html2canvas(patientInfo);
-    const patientImgData = patientCanvas.toDataURL('image/png');
-    const patientImgProps = pdf.getImageProperties(patientImgData);
-    const patientPdfWidth = pdfWidth - 20; // with margin
-    const patientPdfHeight = (patientImgProps.height * patientPdfWidth) / patientImgProps.width;
-    pdf.text("Periodontal Chart Report", 10, 15);
-    pdf.addImage(patientImgData, 'PNG', 10, 20, patientPdfWidth, patientPdfHeight);
-
-    // 2. Add Tooth Chart
-    const chartCanvas = await html2canvas(toothChart);
-    const chartImgData = chartCanvas.toDataURL('image/png');
-    const chartImgProps = pdf.getImageProperties(chartImgData);
-    const chartPdfWidth = pdfWidth - 20;
-    const chartPdfHeight = (chartImgProps.height * chartPdfWidth) / chartImgProps.width;
-    pdf.addPage();
-    pdf.addImage(chartImgData, 'PNG', 10, 10, chartPdfWidth, chartPdfHeight);
-
-    // 3. Add Chart Summary
-    const summaryCanvas = await html2canvas(chartSummary);
-    const summaryImgData = summaryCanvas.toDataURL('image/png');
-    const summaryImgProps = pdf.getImageProperties(summaryImgData);
-    const summaryPdfWidth = pdfWidth - 20;
-    const summaryPdfHeight = (summaryImgProps.height * summaryPdfWidth) / summaryImgProps.width;
-    pdf.addPage();
-    pdf.addImage(summaryImgData, 'PNG', 10, 10, summaryPdfWidth, summaryPdfHeight);
-
-    const fileName = `${patientHN || 'NoHN'}-${patientName || 'NoName'}-Report.pdf`;
-    pdf.save(fileName);
+  const handleSaveChanges = (toothId, updatedToothData) => {
+    setChartData(prev => ({
+        ...prev,
+        [toothId]: updatedToothData
+    }));
+    setEditingTooth(null);
   };
 
   return (
@@ -349,6 +325,14 @@ export default function VoiceControlledPeriodontalChartApp() {
               <h1 className="text-3xl font-bold text-blue-700">Voice Periodontal Chart <span className="text-base align-top bg-blue-100 text-blue-600 p-1 rounded">Beta</span></h1>
             </div>
             <div className="space-x-2 flex items-center">
+                {isEditMode && (
+                    <button 
+                        onClick={() => setIsEditMode(false)}
+                        className="px-4 py-2 rounded-lg font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors h-10"
+                    >
+                        Finish Editing
+                    </button>
+                )}
                 <Dropdown label="Save">
                   <button onClick={handleSaveChart} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Save Draft</button>
                   <button onClick={handleDownload} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Download JSON</button>
@@ -391,6 +375,7 @@ export default function VoiceControlledPeriodontalChartApp() {
               activeSite={chartingMode === 'PD_RE' ? activeInfo : null}
               missingTeeth={missingTeeth}
               isEditMode={isEditMode}
+              onDataCellClick={handleOpenEditModal}
            />
         </div>
 
@@ -426,6 +411,16 @@ export default function VoiceControlledPeriodontalChartApp() {
                 collected: mgjValues.length, 
                 total: currentMgjQuadrantTeeth.length 
             }}
+        />
+      )}
+
+      {editingTooth && (
+        <EditDataModal 
+            toothId={editingTooth.id}
+            surface={editingTooth.surface}
+            initialData={editingTooth.data}
+            onSave={handleSaveChanges}
+            onClose={handleCloseEditModal}
         />
       )}
 

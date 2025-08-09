@@ -1,6 +1,7 @@
 // src/components/PeriodontalChartApp.jsx
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { exportChartAsPdf } from '../utils/pdf-exporter';
 import ToothChart from './ToothChart';
 import Numpad from './Numpad';
 import ChartSummary from './ChartSummary';
@@ -9,8 +10,8 @@ import PatientInfo from './PatientInfo';
 import ChartingModeSelector from './ChartingModeSelector';
 import SequenceCustomizer from './SequenceCustomizer';
 import Dropdown from './Dropdown';
-import ConfirmationModal from './ConfirmationModal'; // Import the new modal
-import EditDataModal from './EditDataModal'; // Import the new modal
+import ConfirmationModal from './ConfirmationModal';
+import EditDataModal from './EditDataModal';
 import { createChartingOrder, INITIAL_CHART_DATA } from '../chart.config';
 
 const DEFAULT_SEQUENCE = [
@@ -24,7 +25,6 @@ const DEFAULT_SEQUENCE = [
     { id: 'Q3B', label: 'Q3 Buccal', direction: 'RL' },
 ];
 
-// Helper to get initial state from localStorage or use defaults
 const getInitialState = () => {
     const savedState = localStorage.getItem('periodontalChartCurrentState');
     if (savedState) {
@@ -63,7 +63,6 @@ export default function PeriodontalChartApp() {
   const [editingTooth, setEditingTooth] = useState(null);
 
 
-  // Load history and sequence from localStorage on mount
   useEffect(() => {
     const savedSequence = localStorage.getItem('periodontalChartSequence');
     if (savedSequence) {
@@ -72,19 +71,10 @@ export default function PeriodontalChartApp() {
 
     const savedHistory = localStorage.getItem('periodontalChartHistory');
     if (savedHistory) {
-      const parsedHistory = JSON.parse(savedHistory);
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const stillValidHistory = parsedHistory.filter(item => new Date(item.date) > sevenDaysAgo);
-      setHistory(stillValidHistory);
-      if (stillValidHistory.length < parsedHistory.length) {
-        localStorage.setItem('periodontalChartHistory', JSON.stringify(stillValidHistory));
-        alert(`${parsedHistory.length - stillValidHistory.length} expired chart(s) have been removed.`);
-      }
+      setHistory(JSON.parse(savedHistory));
     }
   }, []);
 
-  // Save current state to localStorage whenever it changes
   useEffect(() => {
     const currentState = { chartData, missingTeeth, patientHN, patientName };
     localStorage.setItem('periodontalChartCurrentState', JSON.stringify(currentState));
@@ -288,11 +278,20 @@ export default function PeriodontalChartApp() {
               <h1 className="text-3xl font-bold text-blue-700">Periodontal Chart</h1>
             </div>
             <div className="space-x-2 flex items-center">
+                {isEditMode && (
+                    <button 
+                        onClick={() => setIsEditMode(false)}
+                        className="px-4 py-2 rounded-lg font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors h-10"
+                    >
+                        Finish Editing
+                    </button>
+                )}
                 <Dropdown label="Save">
                   <button onClick={handleSaveChart} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Save Draft</button>
-                  <button onClick={handleDownload} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Download</button>
+                  <button onClick={handleDownload} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Download JSON</button>
+                  <button onClick={() => exportChartAsPdf(patientHN, patientName)} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Export PDF</button>
                   <label className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer">
-                    Upload
+                    Upload JSON
                     <input type="file" accept=".json" className="hidden" onChange={handleUpload} />
                   </label>
                 </Dropdown>
@@ -306,13 +305,26 @@ export default function PeriodontalChartApp() {
             </div>
         </div>
 
-        <PatientInfo patientHN={patientHN} setPatientHN={setPatientHN} patientName={patientName} setPatientName={setPatientName} />
+        <div id="patient-info-pdf">
+          <PatientInfo patientHN={patientHN} setPatientHN={setPatientHN} patientName={patientName} setPatientName={setPatientName} />
+        </div>
 
         <ChartingModeSelector modes={chartingModes} onModeChange={handleModeChange} />
 
-        <ToothChart data={chartData} onSiteClick={handleToothClick} activeSite={activeChartingInfo} missingTeeth={missingTeeth} isEditMode={isEditMode} onDataCellClick={handleOpenEditModal}/>
-
-        <ChartSummary chartData={chartData} missingTeeth={missingTeeth} />
+        <div id="tooth-chart-pdf">
+          <ToothChart 
+            data={chartData} 
+            onSiteClick={handleToothClick} 
+            activeSite={activeChartingInfo} 
+            missingTeeth={missingTeeth} 
+            isEditMode={isEditMode} 
+            onDataCellClick={handleOpenEditModal}
+          />
+        </div>
+        
+        <div id="chart-summary-pdf">
+          <ChartSummary chartData={chartData} missingTeeth={missingTeeth} />
+        </div>
 
         <HistoryPanel history={history} onLoad={handleLoadChart} onDelete={handleDeleteChart} />
       </div>

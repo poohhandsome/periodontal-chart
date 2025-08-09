@@ -117,6 +117,7 @@ const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode, o
     <div className="bg-white p-4 rounded-xl shadow-lg">
       <div className="space-y-3">
         {/* === MAXILLARY (UPPER) ARCH === */}
+        <div id="pdf-upper-arch">
         <div className="space-y-1">
           <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="pd" siteKeys={buccalSites} label="PD" surface="buccal" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
           <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="re" siteKeys={buccalSites} label="RE" surface="buccal" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
@@ -144,8 +145,9 @@ const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode, o
           <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="pd" siteKeys={lingualSites} label="PD" surface="lingual" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
           <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="re" siteKeys={lingualSites} label="RE" surface="lingual" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
         </div>
-
+        </div>
         {/* === MANDIBULAR (LOWER) ARCH === */}
+        <div id="pdf-lower-arch">
         <div className="space-y-1 pt-6 border-t-8 border-gray-200">
             <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="pd" siteKeys={lingualSites} label="PD" surface="lingual" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
             <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="re" siteKeys={lingualSites} label="RE" surface="lingual" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
@@ -172,6 +174,7 @@ const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode, o
             <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="pd" siteKeys={buccalSites} label="PD" surface="buccal" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
             <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="re" siteKeys={buccalSites} label="RE" surface="buccal" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
             <MGJDataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} label="MGJ" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
+        </div>
         </div>
       </div>
     </div>
