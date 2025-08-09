@@ -4,7 +4,7 @@ import React from 'react';
 import Tooth from './Tooth';
 import { UPPER_RIGHT, UPPER_LEFT, LOWER_LEFT, LOWER_RIGHT } from '../chart.config';
 
-// Renders a cell with 3 data points, now with highlighting for PD >= 4mm
+// Renders a cell with 3 data points
 const DataCell = ({ values, field }) => (
   <div className="flex-1 h-6 flex justify-around items-center text-xs font-mono border-r border-gray-200 last:border-r-0">
     {values.map((val, i) => (
@@ -20,16 +20,15 @@ const DataCell = ({ values, field }) => (
   </div>
 );
 
-// Renders a cell with a single data point, centered (for MGJ)
+// Renders a cell with a single data point
 const MGJDataCell = ({ value }) => (
     <div className="flex-1 h-6 flex justify-center items-center text-xs font-mono border-r border-gray-200 last:border-r-0">
         <span>{value ?? '-'}</span>
     </div>
 );
 
-// --- THIS COMPONENT IS NOW FIXED ---
-const DataRow = ({ teeth, data, field, siteKeys, label, missingTeeth=[] }) => {
-    // Helper to determine if a tooth is on the left side of the arch
+// Renders a full row for PD or RE data
+const DataRow = ({ teeth, data, field, siteKeys, label, surface, missingTeeth=[], onDataCellClick }) => {
     const isLeftSideTooth = (toothId) => UPPER_LEFT.includes(toothId) || LOWER_LEFT.includes(toothId);
 
     return (
@@ -38,21 +37,23 @@ const DataRow = ({ teeth, data, field, siteKeys, label, missingTeeth=[] }) => {
             <div className="flex-1 flex bg-gray-50 border border-gray-200 rounded-sm">
                 <div className="flex flex-1">
                     {teeth.slice(0, 8).map(toothId => {
-                        // THE FIX: Reverse siteKeys for left-side teeth before mapping data
                         const displaySiteKeys = isLeftSideTooth(toothId) ? [...siteKeys].reverse() : siteKeys;
                         return missingTeeth.includes(toothId)
                             ? <div key={toothId} className="flex-1 border-r border-gray-200"></div>
-                            : <DataCell key={`${toothId}-${field}`} values={displaySiteKeys.map(site => data[toothId]?.[field]?.[site])} field={field} />
+                            : <div key={`${toothId}-${field}`} className="flex-1 cursor-pointer hover:bg-blue-100" onClick={() => onDataCellClick(toothId, surface)}>
+                                  <DataCell values={displaySiteKeys.map(site => data[toothId]?.[field]?.[site])} field={field} />
+                              </div>
                     })}
                 </div>
                 <div className="w-4 bg-white"></div>
                 <div className="flex flex-1">
                     {teeth.slice(8).map(toothId => {
-                        // THE FIX: Also applied here for the other half of the arch
                         const displaySiteKeys = isLeftSideTooth(toothId) ? [...siteKeys].reverse() : siteKeys;
                         return missingTeeth.includes(toothId)
                             ? <div key={toothId} className="flex-1 border-r border-gray-200"></div>
-                            : <DataCell key={`${toothId}-${field}`} values={displaySiteKeys.map(site => data[toothId]?.[field]?.[site])} field={field} />
+                            : <div key={`${toothId}-${field}`} className="flex-1 cursor-pointer hover:bg-blue-100" onClick={() => onDataCellClick(toothId, surface)}>
+                                  <DataCell values={displaySiteKeys.map(site => data[toothId]?.[field]?.[site])} field={field} />
+                              </div>
                     })}
                 </div>
             </div>
@@ -60,24 +61,28 @@ const DataRow = ({ teeth, data, field, siteKeys, label, missingTeeth=[] }) => {
     );
 };
 
-// New component specifically for the MGJ data row
-const MGJDataRow = ({ teeth, data, label, missingTeeth=[] }) => (
+// Renders a full row for MGJ data
+const MGJDataRow = ({ teeth, data, label, missingTeeth=[], onDataCellClick }) => (
     <div className="flex items-center">
         <div className="w-10 text-right pr-2 text-blue-600 font-semibold text-xs">{label}</div>
         <div className="flex-1 flex bg-gray-50 border border-gray-200 rounded-sm">
             <div className="flex flex-1">
-                {teeth.slice(0, 8).map(toothId =>
-                    missingTeeth.includes(toothId)
-                        ? <div key={toothId} className="flex-1 border-r border-gray-200"></div>
-                        : <MGJDataCell key={`${toothId}-mgj`} value={data[toothId]?.mgj?.b} />
+                {teeth.slice(0, 8).map(toothId => 
+                    missingTeeth.includes(toothId) 
+                        ? <div key={toothId} className="flex-1 border-r border-gray-200"></div> 
+                        : <div key={`${toothId}-mgj`} className="flex-1 cursor-pointer hover:bg-blue-100" onClick={() => onDataCellClick(toothId, 'buccal')}>
+                              <MGJDataCell value={data[toothId]?.mgj?.b} />
+                          </div>
                 )}
             </div>
             <div className="w-4 bg-white"></div>
             <div className="flex flex-1">
-                 {teeth.slice(8).map(toothId =>
-                    missingTeeth.includes(toothId)
-                        ? <div key={toothId} className="flex-1 border-r border-gray-200"></div>
-                        : <MGJDataCell key={`${toothId}-mgj`} value={data[toothId]?.mgj?.b} />
+                 {teeth.slice(8).map(toothId => 
+                    missingTeeth.includes(toothId) 
+                        ? <div key={toothId} className="flex-1 border-r border-gray-200"></div> 
+                        : <div key={`${toothId}-mgj`} className="flex-1 cursor-pointer hover:bg-blue-100" onClick={() => onDataCellClick(toothId, 'buccal')}>
+                              <MGJDataCell value={data[toothId]?.mgj?.b} />
+                          </div>
                 )}
             </div>
         </div>
@@ -85,7 +90,7 @@ const MGJDataRow = ({ teeth, data, label, missingTeeth=[] }) => (
 );
 
 
-const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode }) => {
+const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode, onDataCellClick }) => {
   const buccalSites = ['db', 'b', 'mb'];
   const lingualSites = ['dl', 'l', 'ml'];
 
@@ -108,71 +113,65 @@ const ToothChart = ({ data, onSiteClick, activeSite, missingTeeth, isEditMode })
     </div>
   );
   
- return (
+  return (
     <div className="bg-white p-4 rounded-xl shadow-lg">
       <div className="space-y-3">
-        {/* --- ADDED ID FOR UPPER ARCH --- */}
-        <div id="pdf-upper-arch">
-          {/* === MAXILLARY (UPPER) ARCH === */}
-          <div className="space-y-1">
-            <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="pd" siteKeys={buccalSites} label="PD" missingTeeth={missingTeeth}/>
-            <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="re" siteKeys={buccalSites} label="RE" missingTeeth={missingTeeth}/>
-            <MGJDataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} label="MGJ" missingTeeth={missingTeeth}/>
-            <div className="h-2"></div>
-            <div className="flex justify-center items-center">
-              <div className="w-10"></div>
-              <div className="flex-1 flex">
-                {renderQuadrant(UPPER_RIGHT, 'buccal', 'upper')}
-                <div className="w-4 h-28 self-center"></div>
-                {renderQuadrant(UPPER_LEFT, 'buccal', 'upper')}
-              </div>
+        {/* === MAXILLARY (UPPER) ARCH === */}
+        <div className="space-y-1">
+          <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="pd" siteKeys={buccalSites} label="PD" surface="buccal" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
+          <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="re" siteKeys={buccalSites} label="RE" surface="buccal" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
+          <MGJDataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} label="MGJ" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
+          <div className="h-2"></div>
+          <div className="flex justify-center items-center">
+            <div className="w-10"></div>
+            <div className="flex-1 flex">
+              {renderQuadrant(UPPER_RIGHT, 'buccal', 'upper')}
+              <div className="w-4 h-28 self-center"></div>
+              {renderQuadrant(UPPER_LEFT, 'buccal', 'upper')}
             </div>
-          </div>
-          <div className="space-y-1 pt-3 border-t-4 border-gray-200">
-            <div className="h-2"></div>
-            <div className="flex justify-center items-center">
-               <div className="w-10"></div>
-               <div className="flex-1 flex">
-                  {renderQuadrant(UPPER_RIGHT, 'lingual', 'upper')}
-                  <div className="w-4 h-28 self-center"></div>
-                  {renderQuadrant(UPPER_LEFT, 'lingual', 'upper')}
-               </div>
-            </div>
-            <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="pd" siteKeys={lingualSites} label="PD" missingTeeth={missingTeeth}/>
-            <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="re" siteKeys={lingualSites} label="RE" missingTeeth={missingTeeth}/>
           </div>
         </div>
+        <div className="space-y-1 pt-3 border-t-4 border-gray-200">
+          <div className="h-2"></div>
+          <div className="flex justify-center items-center">
+             <div className="w-10"></div>
+             <div className="flex-1 flex">
+                {renderQuadrant(UPPER_RIGHT, 'lingual', 'upper')}
+                <div className="w-4 h-28 self-center"></div>
+                {renderQuadrant(UPPER_LEFT, 'lingual', 'upper')}
+             </div>
+          </div>
+          <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="pd" siteKeys={lingualSites} label="PD" surface="lingual" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
+          <DataRow teeth={[...UPPER_RIGHT, ...UPPER_LEFT]} data={data} field="re" siteKeys={lingualSites} label="RE" surface="lingual" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
+        </div>
 
-        {/* --- ADDED ID FOR LOWER ARCH --- */}
-        <div id="pdf-lower-arch" className="pt-6 border-t-8 border-gray-200">
-          {/* === MANDIBULAR (LOWER) ARCH === */}
-          <div className="space-y-1">
-              <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="pd" siteKeys={lingualSites} label="PD" missingTeeth={missingTeeth}/>
-              <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="re" siteKeys={lingualSites} label="RE" missingTeeth={missingTeeth}/>
-              <div className="h-2"></div>
-              <div className="flex justify-center items-center">
-                  <div className="w-10"></div>
-                  <div className="flex-1 flex">
-                      {renderQuadrant(LOWER_RIGHT, 'lingual', 'lower')}
-                      <div className="w-4 h-28 self-center"></div>
-                      {renderQuadrant(LOWER_LEFT, 'lingual', 'lower')}
-                  </div>
-              </div>
-          </div>
-          <div className="space-y-1 pt-3 border-t-4 border-gray-200">
-              <div className="h-2"></div>
-              <div className="flex justify-center items-center">
-                  <div className="w-10"></div>
-                  <div className="flex-1 flex">
-                      {renderQuadrant(LOWER_RIGHT, 'buccal', 'lower')}
-                      <div className="w-4 h-28 self-center"></div>
-                      {renderQuadrant(LOWER_LEFT, 'buccal', 'lower')}
-                  </div>
-              </div>
-              <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="pd" siteKeys={buccalSites} label="PD" missingTeeth={missingTeeth}/>
-              <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="re" siteKeys={buccalSites} label="RE" missingTeeth={missingTeeth}/>
-              <MGJDataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} label="MGJ" missingTeeth={missingTeeth}/>
-          </div>
+        {/* === MANDIBULAR (LOWER) ARCH === */}
+        <div className="space-y-1 pt-6 border-t-8 border-gray-200">
+            <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="pd" siteKeys={lingualSites} label="PD" surface="lingual" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
+            <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="re" siteKeys={lingualSites} label="RE" surface="lingual" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
+            <div className="h-2"></div>
+            <div className="flex justify-center items-center">
+                <div className="w-10"></div>
+                <div className="flex-1 flex">
+                    {renderQuadrant(LOWER_RIGHT, 'lingual', 'lower')}
+                    <div className="w-4 h-28 self-center"></div>
+                    {renderQuadrant(LOWER_LEFT, 'lingual', 'lower')}
+                </div>
+            </div>
+        </div>
+        <div className="space-y-1 pt-3 border-t-4 border-gray-200">
+            <div className="h-2"></div>
+            <div className="flex justify-center items-center">
+                <div className="w-10"></div>
+                <div className="flex-1 flex">
+                    {renderQuadrant(LOWER_RIGHT, 'buccal', 'lower')}
+                    <div className="w-4 h-28 self-center"></div>
+                    {renderQuadrant(LOWER_LEFT, 'buccal', 'lower')}
+                </div>
+            </div>
+            <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="pd" siteKeys={buccalSites} label="PD" surface="buccal" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
+            <DataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} field="re" siteKeys={buccalSites} label="RE" surface="buccal" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
+            <MGJDataRow teeth={[...LOWER_RIGHT, ...LOWER_LEFT]} data={data} label="MGJ" missingTeeth={missingTeeth} onDataCellClick={onDataCellClick} />
         </div>
       </div>
     </div>

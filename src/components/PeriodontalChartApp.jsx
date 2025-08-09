@@ -10,6 +10,7 @@ import ChartingModeSelector from './ChartingModeSelector';
 import SequenceCustomizer from './SequenceCustomizer';
 import Dropdown from './Dropdown';
 import ConfirmationModal from './ConfirmationModal'; // Import the new modal
+import EditDataModal from './EditDataModal'; // Import the new modal
 import { createChartingOrder, INITIAL_CHART_DATA } from '../chart.config';
 
 const DEFAULT_SEQUENCE = [
@@ -59,6 +60,7 @@ export default function PeriodontalChartApp() {
   const [customSequence, setCustomSequence] = useState(DEFAULT_SEQUENCE);
   const [showCustomizer, setShowCustomizer] = useState(false);
   const [isClearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [editingTooth, setEditingTooth] = useState(null);
 
 
   // Load history and sequence from localStorage on mount
@@ -257,6 +259,25 @@ export default function PeriodontalChartApp() {
     setClearConfirmOpen(false);
   };
 
+  const handleOpenEditModal = (toothId, surface) => {
+    setEditingTooth({
+        id: toothId,
+        surface: surface,
+        data: chartData[toothId]
+    });
+  };
+
+  const handleCloseEditModal = () => {
+    setEditingTooth(null);
+  };
+
+  const handleSaveChanges = (toothId, updatedToothData) => {
+    setChartData(prev => ({
+        ...prev,
+        [toothId]: updatedToothData
+    }));
+    setEditingTooth(null);
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 p-4 font-sans">
@@ -289,7 +310,7 @@ export default function PeriodontalChartApp() {
 
         <ChartingModeSelector modes={chartingModes} onModeChange={handleModeChange} />
 
-        <ToothChart data={chartData} onSiteClick={handleToothClick} activeSite={activeChartingInfo} missingTeeth={missingTeeth} isEditMode={isEditMode} />
+        <ToothChart data={chartData} onSiteClick={handleToothClick} activeSite={activeChartingInfo} missingTeeth={missingTeeth} isEditMode={isEditMode} onDataCellClick={handleOpenEditModal}/>
 
         <ChartSummary chartData={chartData} missingTeeth={missingTeeth} />
 
@@ -311,6 +332,16 @@ export default function PeriodontalChartApp() {
           onInput={handleNumpadInput}
           onBopSelect={handleBopInput}
           onClose={stopCharting}
+        />
+      )}
+
+      {editingTooth && (
+        <EditDataModal 
+            toothId={editingTooth.id}
+            surface={editingTooth.surface}
+            initialData={editingTooth.data}
+            onSave={handleSaveChanges}
+            onClose={handleCloseEditModal}
         />
       )}
 
