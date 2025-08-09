@@ -83,20 +83,29 @@ export const createChartingOrder = (missingTeeth = [], modes = {}, customSequenc
   });
   return order;
 };
-
 export const createVoiceChartingOrder = (missingTeeth = [], customSequence = []) => {
   const order = [];
   const availableTeeth = (teeth) => teeth.filter(t => !missingTeeth.includes(t));
+
   customSequence.forEach(segment => {
     const { teeth: baseTeeth, surface } = SEQUENCE_MAP[segment.id];
-    const isReversed = segment.direction === 'RL';
-    const processableTeeth = availableTeeth(isReversed ? [...baseTeeth].reverse() : baseTeeth);
+    const quadrant = segment.id.substring(0, 2);
+
+    const isDirectionReversed = segment.direction === 'RL';
+    const processableTeeth = availableTeeth(isDirectionReversed ? [...baseTeeth].reverse() : baseTeeth);
+    
+    // --- THE FIX ---
+    // This is the same proven logic from the original chart, now applied here.
+    const isQuadrantOnLeftSide = quadrant === 'Q2' || quadrant === 'Q3';
+    const useEffectiveRLProbingOrder = isDirectionReversed ^ isQuadrantOnLeftSide;
+
     let sitesForSurface;
     if (surface === 'buccal') {
-      sitesForSurface = isReversed ? BUCCAL_SITES_RL : BUCCAL_SITES_LR;
+      sitesForSurface = useEffectiveRLProbingOrder ? BUCCAL_SITES_RL : BUCCAL_SITES_LR;
     } else {
-      sitesForSurface = isReversed ? LINGUAL_SITES_RL : LINGUAL_SITES_LR;
+      sitesForSurface = useEffectiveRLProbingOrder ? LINGUAL_SITES_RL : LINGUAL_SITES_LR;
     }
+
     processableTeeth.forEach(toothId => {
       order.push({
         toothId,
@@ -106,5 +115,6 @@ export const createVoiceChartingOrder = (missingTeeth = [], customSequence = [])
       });
     });
   });
+
   return order;
 };
