@@ -1,5 +1,5 @@
 // src/components/SequenceCustomizer.jsx
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 
 // Helper to get the color for each quadrant
 const getQuadrantColor = (id) => {
@@ -10,30 +10,42 @@ const getQuadrantColor = (id) => {
     return 'bg-gray-400';
 };
 
-const SequenceItem = ({
-  item,
-  onToggleDirection,
-  // Pass down all event handlers for both mouse and touch
-  ...dragHandlers 
-}) => {
+const SequenceItem = ({ item, onToggleDirection, onMove, isFirst, isLast }) => {
   return (
     <div
-      {...dragHandlers} // Spread all handlers onto the div
-      className="flex items-center justify-between p-2 bg-white border rounded-lg shadow-sm select-none" // `select-none` helps prevent text selection
+      className="flex items-center justify-between p-2 bg-white border border-gray-200 rounded-lg shadow-sm select-none"
     >
         <div className="flex items-center gap-3">
-            {/* Drag Handle */}
-            <div className="cursor-move text-gray-400" title="Drag to reorder">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="1"></circle>
-                    <circle cx="12" cy="5" r="1"></circle>
-                    <circle cx="12" cy="19" r="1"></circle>
-                </svg>
+            {/* --- NEW, TOUCH-FRIENDLY MOVER BUTTONS --- */}
+            <div className="flex items-center gap-2">
+                {/* UP Button */}
+                <button
+                    onClick={() => onMove('up')}
+                    disabled={isFirst}
+                    className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Move Up"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+                {/* DOWN Button */}
+                 <button
+                    onClick={() => onMove('down')}
+                    disabled={isLast}
+                    className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Move Down"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </button>
             </div>
             {/* Quadrant Color Dot */}
             <div className={`w-3 h-3 rounded-full ${getQuadrantColor(item.id)}`}></div>
             <span className="font-semibold text-gray-700">{item.label}</span>
         </div>
+      {/* Direction Toggle Button */}
       <button
         onClick={() => onToggleDirection(item.id)}
         className="p-1 rounded-full hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -61,8 +73,16 @@ const SequenceItem = ({
 
 const SequenceCustomizer = ({ sequence, onSequenceChange, onClose }) => {
   const [localSequence, setLocalSequence] = useState(sequence);
-  const dragItem = useRef(null);
-  const dragOverItem = useRef(null);
+
+  const handleMove = (index, direction) => {
+    const newSequence = [...localSequence];
+    const item = newSequence[index];
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= newSequence.length) return;
+    newSequence.splice(index, 1);
+    newSequence.splice(newIndex, 0, item);
+    setLocalSequence(newSequence);
+  };
 
   const handleToggleDirection = (id) => {
     setLocalSequence(prev =>
@@ -73,34 +93,6 @@ const SequenceCustomizer = ({ sequence, onSequenceChange, onClose }) => {
       )
     );
   };
-  
-  // --- UNIFIED DRAG-AND-DROP LOGIC FOR MOUSE AND TOUCH ---
-  const handleDragSort = () => {
-    if (dragItem.current === null || dragOverItem.current === null) return;
-    const sequenceClone = [...localSequence];
-    const draggedItemContent = sequenceClone.splice(dragItem.current, 1)[0];
-    sequenceClone.splice(dragOverItem.current, 0, draggedItemContent);
-    dragItem.current = null;
-    dragOverItem.current = null;
-    setLocalSequence(sequenceClone);
-  };
-  
-  // --- TOUCH EVENT HANDLERS ---
-  const handleTouchStart = (index) => {
-    dragItem.current = index;
-  };
-
-  const handleTouchMove = (e, index) => {
-    // Prevent screen scrolling while dragging
-    e.preventDefault(); 
-    dragOverItem.current = index;
-  };
-  
-  // handleDragSort is called on touch end, same as on mouse drop
-  const handleTouchEnd = () => {
-    handleDragSort();
-  };
-
 
   const handleSave = () => {
     onSequenceChange(localSequence);
@@ -112,7 +104,7 @@ const SequenceCustomizer = ({ sequence, onSequenceChange, onClose }) => {
       <div className="bg-gray-50 rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col max-h-[90vh]">
         <h2 className="text-2xl font-bold text-gray-800 mb-4">Customize Charting Sequence</h2>
         <p className="text-sm text-gray-600 mb-4">
-          Drag and drop to reorder your charting workflow. Use the arrow buttons on the right to change the measurement direction.
+          Use the arrows to reorder your charting workflow. Use the arrow buttons on the right to change the measurement direction.
         </p>
         <div className="space-y-2 overflow-y-auto flex-grow pr-2">
           {localSequence.map((item, index) => (
@@ -120,16 +112,9 @@ const SequenceCustomizer = ({ sequence, onSequenceChange, onClose }) => {
               key={item.id}
               item={item}
               onToggleDirection={handleToggleDirection}
-              // Mouse Events
-              draggable
-              onDragStart={() => (dragItem.current = index)}
-              onDragEnter={() => (dragOverItem.current = index)}
-              onDragEnd={handleDragSort}
-              onDragOver={(e) => e.preventDefault()}
-              // Touch Events for iPad
-              onTouchStart={() => handleTouchStart(index)}
-              onTouchMove={(e) => handleTouchMove(e, index)}
-              onTouchEnd={handleTouchEnd}
+              onMove={(direction) => handleMove(index, direction)}
+              isFirst={index === 0}
+              isLast={index === localSequence.length - 1}
             />
           ))}
         </div>
