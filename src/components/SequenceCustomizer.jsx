@@ -16,7 +16,7 @@ const SequenceItem = ({ item, onToggleDirection, onMove, isFirst, isLast }) => {
       className="flex items-center justify-between p-2 bg-white border border-gray-200 rounded-lg shadow-sm select-none"
     >
         <div className="flex items-center gap-3">
-            {/* --- NEW, TOUCH-FRIENDLY MOVER BUTTONS --- */}
+            {/* --- NEW, TOUCH-FRIENDLY MOVER BUTTONS (SIDE-BY-SIDE) --- */}
             <div className="flex items-center gap-2">
                 {/* UP Button */}
                 <button
@@ -25,7 +25,7 @@ const SequenceItem = ({ item, onToggleDirection, onMove, isFirst, isLast }) => {
                     className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
                     title="Move Up"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transform rotate-90">
                         <polyline points="15 18 9 12 15 6"></polyline>
                     </svg>
                 </button>
@@ -36,8 +36,8 @@ const SequenceItem = ({ item, onToggleDirection, onMove, isFirst, isLast }) => {
                     className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
                     title="Move Down"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="9 18 15 12 9 6"></polyline>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transform -rotate-90">
+                        <polyline points="15 18 9 12 15 6"></polyline>
                     </svg>
                 </button>
             </div>
