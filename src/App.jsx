@@ -5,7 +5,7 @@ import PeriodontalChartPage from './pages/PeriodontalChartPage';
 import PlaqueIndexPage from './pages/PlaqueIndexPage';
 import VoicePeriodontalChartPage from './pages/VoicePeriodontalChartPage';
 import QRCodePage from './pages/QRCodePage'; // Import the new page
-
+import XRayAnalysisPage from './pages/XRayAnalysisPage';
 const App = () => {
     const [route, setRoute] = useState(window.location.hash);
 
@@ -27,6 +27,7 @@ const App = () => {
                 return <VoicePeriodontalChartPage />;
             case '#/qr-donate': // Add the new route
                 return <QRCodePage />;
+            case '#/xray-analysis': return <XRayAnalysisPage />;
             default:
                 return <LandingPage />;
         }

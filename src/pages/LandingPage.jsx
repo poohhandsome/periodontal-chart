@@ -31,7 +31,11 @@ const LandingPage = () => {
     const VoiceIcon = () => (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
     );
-
+   const XRayIcon = () => (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 01-6.23-.872l-1.57-.393M19.8 15.3a2.25 2.25 0 00-2.25-2.25H6.45a2.25 2.25 0 00-2.25 2.25m15.6 0A24.226 24.226 0 0112 18.75a24.226 24.226 0 01-7.8-3.45m15.6 0a2.25 2.25 0 01-2.25 2.25h-5.25a2.25 2.25 0 01-2.25-2.25m3.75-12.25c0 .621.504 1.125 1.125 1.125h3.375c.621 0 1.125-.504 1.125-1.125V4.875c0-.621-.504-1.125-1.125-1.125h-3.375A1.125 1.125 0 0011.25 4.875v1.5z" />
+        </svg>
+    );
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -71,6 +75,13 @@ const LandingPage = () => {
                             isBeta={true}
                         />
                     </div>
+                    <ToolCard 
+                        title="2D X-Ray Analysis"
+                        description="Upload radiographs for manual analysis."
+                        href="#/xray-analysis"
+                        icon={<XRayIcon />}
+                        isBeta={true} 
+                    />
                 </div>
 
 
