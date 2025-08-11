@@ -3,10 +3,11 @@ import { ProcessingStep, PrognosisLevel } from '../../xray-types';
 import { UploadIcon, CameraIcon, CloseIcon } from './Icons';
 import { slotConfigurations } from '../../xray-config';
 
+// Define two sets of labels for the different analysis types
 const paAnnotationLabels = ["Crown Tip", "CEJ", "Bone Level", "Root Apex"];
 const bwAnnotationLabels = ["Tooth Axis Point", "CEJ", "Bone Level"];
 
-const pointColors = ['#00FFFF', '#FF00FF', '#FFFF00', '#00FF00'];
+const pointColors = ['#00FFFF', '#FF00FF', '#FFFF00', '#00FF00']; // Crown, CEJ, Bone, Apex
 
 const projectPointOnLine = (p, a, b) => {
     const atob = { x: b.x - a.x, y: b.y - a.y };
@@ -18,9 +19,6 @@ const projectPointOnLine = (p, a, b) => {
     return { x: a.x + atob.x * t, y: a.y + atob.y * t };
 };
 
-// NEW: The calculated, fixed ratio for calibration.
-const PIXELS_PER_MM = 12;
-
 const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => {
   const [step, setStep] = useState(ProcessingStep.UPLOAD);
   const [originalImage, setOriginalImage] = useState(null);
@@ -30,6 +28,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
   ]);
   const [canvasSize, setCanvasSize] = useState({ width: 500, height: 500 });
   
+  // Annotation state
   const [annotationSubStep, setAnnotationSubStep] = useState('SELECT');
   const [activeTooth, setActiveTooth] = useState(null);
   const [completedReports, setCompletedReports] = useState([]);
@@ -42,6 +41,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
   const [mousePos, setMousePos] = useState(null);
   const lastInteractionTime = useRef(0);
 
+  // NEW: Conditionally choose the labels based on the 'isVertical' prop
   const annotationLabels = isVertical ? bwAnnotationLabels : paAnnotationLabels;
 
   useEffect(() => {
@@ -52,7 +52,6 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     }
   }, [initialData]);
 
-  // Drawing logic is unchanged
   const drawAnalysisLines = (ctx, report, color) => {
     const [axisStart, axisEnd] = report.axis;
     ctx.beginPath();
@@ -85,7 +84,9 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
     if (step === ProcessingStep.KEYSTONE && originalImage) {
         ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
         ctx.strokeStyle = '#00FFFF';
@@ -105,12 +106,16 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
         const img = new Image();
         img.onload = () => {
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            // Draw completed reports
             completedReports.forEach(r => {
                 if(r.toothNumber !== activeTooth) {
                     drawAnalysisLines(ctx, r, '#888888');
                 }
             });
+
+            // Draw current analysis
             if (activeTooth) {
+                // Draw Tooth Axis (in progress or complete)
                 if (toothAxisPoints.length > 0) {
                     ctx.beginPath();
                     ctx.moveTo(toothAxisPoints[0].x, toothAxisPoints[0].y);
@@ -121,33 +126,38 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
                     ctx.strokeStyle = '#FFFFFF';
                     ctx.lineWidth = 2;
                     ctx.stroke();
+
                     toothAxisPoints.forEach(p => {
                       ctx.fillStyle = '#FFFFFF';
                       ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 2 * Math.PI); ctx.fill();
                     });
                 }
+                
+                // Draw annotation points and their projection lines
                 if (toothAxisPoints.length === 2) {
                     annotationPoints.forEach((p, i) => {
                         const projectedP = projectPointOnLine(p, toothAxisPoints[0], toothAxisPoints[1]);
                         ctx.beginPath();
                         ctx.moveTo(p.x, p.y);
                         ctx.lineTo(projectedP.x, projectedP.y);
-                        ctx.strokeStyle = pointColors[isVertical ? i+1 : i];
+                        ctx.strokeStyle = pointColors[i+1]; // Offset color for BW
                         ctx.lineWidth = 1;
                         ctx.setLineDash([2,2]);
                         ctx.stroke();
                         ctx.setLineDash([]);
+                        
                         ctx.beginPath();
                         ctx.arc(p.x, p.y, 6, 0, 2*Math.PI);
-                        ctx.fillStyle = pointColors[isVertical ? i+1 : i];
+                        ctx.fillStyle = pointColors[i+1]; // Offset color for BW
                         ctx.fill();
                     });
+                     // Draw preview line
                     if (mousePos && annotationSubStep === 'PLACE_POINTS' && annotationPoints.length < (isVertical ? 2 : 4)) {
                         const projectedP = projectPointOnLine(mousePos, toothAxisPoints[0], toothAxisPoints[1]);
                         ctx.beginPath();
                         ctx.moveTo(mousePos.x, mousePos.y);
                         ctx.lineTo(projectedP.x, projectedP.y);
-                        ctx.strokeStyle = pointColors[isVertical ? annotationPoints.length+1 : annotationPoints.length];
+                        ctx.strokeStyle = pointColors[annotationPoints.length + 1]; // Offset color
                         ctx.lineWidth = 1;
                         ctx.setLineDash([2, 2]);
                         ctx.stroke();
@@ -161,8 +171,14 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
   }, [originalImage, step, keystonePoints, processedImage, annotationPoints, activeTooth, completedReports, toothAxisPoints, mousePos, annotationSubStep, isVertical]);
 
   useEffect(() => { draw(); }, [draw]);
+  
+  const getCanvasPoint = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
 
-  // Interaction logic is now simplified, no special calibration mode
   const handleInteractionStart = (e) => {
     const now = Date.now();
     if (now - lastInteractionTime.current < 50) return;
@@ -183,13 +199,6 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
             setAnnotationPoints([...annotationPoints, p]);
         }
     }
-  };
-
-  const getCanvasPoint = (e) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
 
   const handleInteractionMove = (e) => {
@@ -220,8 +229,13 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
             setOriginalImage(img);
             const MAX_DIM = 500;
             let newWidth, newHeight;
-            if (img.width > img.height) { newWidth = MAX_DIM; newHeight = (img.height * MAX_DIM) / img.width; } 
-            else { newHeight = MAX_DIM; newWidth = (img.width * MAX_DIM) / img.height; }
+            if (img.width > img.height) {
+              newWidth = MAX_DIM;
+              newHeight = (img.height * MAX_DIM) / img.width;
+            } else {
+              newHeight = MAX_DIM;
+              newWidth = (img.width * MAX_DIM) / img.height;
+            }
             setCanvasSize({ width: newWidth, height: newHeight });
             const marginX = newWidth * 0.2;
             const marginY = newHeight * 0.2;
@@ -235,7 +249,6 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     }
   };
   
-  // processKeystone now automatically "calibrates" the image
   const processKeystone = () => {
     if (!originalImage) return;
     const canvas = canvasRef.current;
@@ -261,43 +274,85 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     setStep(ProcessingStep.ANNOTATE);
   };
   
+  // ==========================================================
+  // START: UPDATED analyzePoints FUNCTION
+  // ==========================================================
   const analyzePoints = () => {
     if (toothAxisPoints.length < 2 || !activeTooth) return;
+
     const [axisStart, axisEnd] = toothAxisPoints;
     const dist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    
     let reportData = {};
+
     if (isVertical) {
-      if (annotationPoints.length < 2) return;
+      // --- NEW: VERTICAL BITEWING ANALYSIS (3-POINT) ---
+      if (annotationPoints.length < 2) return; 
+
       const [cejPoint, bonePoint] = annotationPoints.map(p => projectPointOnLine(p, axisStart, axisEnd));
+      
+      // CRITICAL: This value needs to be calibrated based on your specific camera/scanner setup.
+      // You must figure out how many pixels on the screen equal 1 millimeter in the actual X-ray.
+      const PIXELS_PER_MM = 10; // Placeholder value for calibration
+      
       const distanceInPixels = dist(cejPoint, bonePoint);
       const distanceInMm = distanceInPixels / PIXELS_PER_MM;
+
       let prognosis;
       if (distanceInMm <= 1) prognosis = 'Normal (N)';
       else if (distanceInMm <= 2) prognosis = 'Early (E)';
       else if (distanceInMm <= 4) prognosis = 'Moderate (M)';
       else prognosis = 'Advanced (A)';
-      reportData = { toothNumber: activeTooth, prognosis, attachmentLossMm: distanceInMm.toFixed(2), crownRootRatio: 'N/A', attachmentLossPercent: -1, };
+
+      reportData = {
+        toothNumber: activeTooth,
+        prognosis: prognosis,
+        attachmentLossMm: distanceInMm.toFixed(2),
+        crownRootRatio: 'N/A',
+        attachmentLossPercent: -1,
+      };
+      
     } else {
+      // --- ORIGINAL: PERIAPICAL ANALYSIS (4-POINT) ---
       if (annotationPoints.length < 4) return;
+
       const projPoints = annotationPoints.map(p => projectPointOnLine(p, axisStart, axisEnd));
       const [pCrown, pCej, pBone, pApex] = projPoints;
       const rootLen = dist(pCej, pApex);
-      if (rootLen === 0) { alert("Root length cannot be zero."); return; }
+
+      if (rootLen === 0) {
+        alert("Root length cannot be zero. Please check CEJ and Apex points.");
+        return;
+      }
+
       const crownLen = dist(pCrown, pCej);
       const attachmentLoss = dist(pCej, pBone);
       const crownRootRatio = (crownLen / rootLen).toFixed(2);
       const attachmentLossPercent = Math.min(100, Math.round((attachmentLoss / rootLen) * 100));
+      
       let prognosis;
       if (attachmentLossPercent < 25) prognosis = PrognosisLevel.GOOD;
       else if (attachmentLossPercent <= 50) prognosis = PrognosisLevel.FAIR;
       else if (attachmentLossPercent <= 75) prognosis = PrognosisLevel.POOR;
       else prognosis = PrognosisLevel.QUESTIONABLE;
+
       reportData = { toothNumber: activeTooth, crownRootRatio, attachmentLossPercent, prognosis };
     }
-    const newReport = { ...reportData, axis: [axisStart, axisEnd], annotations: annotationPoints };
+    
+    // Create the final report object
+    const newReport = { 
+        ...reportData, 
+        axis: [axisStart, axisEnd], 
+        annotations: annotationPoints 
+    };
+
     setCompletedReports(prev => [...prev.filter(r => r.toothNumber !== activeTooth), newReport]);
     resetAnnotationState();
   };
+  // ==========================================================
+  // END: UPDATED analyzePoints FUNCTION
+  // ==========================================================
+
 
   const handleSave = () => {
     if (!processedImage) return;
@@ -315,38 +370,95 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
   const selectToothForAnalysis = (toothNumber) => {
     const existingReport = completedReports.find(r => r.toothNumber === toothNumber);
     if(existingReport) {
-      setToothAxisPoints(existingReport.axis);
-      setAnnotationPoints(existingReport.annotations);
-      setAnnotationSubStep('PLACE_POINTS');
+        setToothAxisPoints(existingReport.axis);
+        setAnnotationPoints(existingReport.annotations);
+        setAnnotationSubStep('PLACE_POINTS');
     } else {
-      setToothAxisPoints([]);
-      setAnnotationPoints([]);
-      setAnnotationSubStep('DRAW_AXIS');
+        setToothAxisPoints([]);
+        setAnnotationPoints([]);
+        setAnnotationSubStep('DRAW_AXIS');
     }
     setActiveTooth(toothNumber);
   }
 
   const renderStepContent = () => {
     switch(step) {
-      case ProcessingStep.UPLOAD: return ( <div className="text-center"> <h3 className="text-xl font-semibold mb-4 text-gray-800">Upload X-Ray</h3> <div className="flex justify-center items-center gap-4"> <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center gap-2 p-6 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors border"> <UploadIcon className="w-12 h-12 text-blue-600" /><span>Upload File</span> </button> <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/png, image/jpeg" className="hidden" /> <p className="font-bold text-gray-500">OR</p> <button onClick={() => alert("Camera capture coming soon!")} className="flex flex-col items-center gap-2 p-6 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors border"> <CameraIcon className="w-12 h-12 text-blue-600" /><span>Use Camera</span> </button> </div> </div> );
-      case ProcessingStep.KEYSTONE: return ( <div> <h3 className="text-lg font-semibold mb-2 text-center text-gray-800">Step 1: Align Film Corners</h3> <p className="text-sm text-center text-gray-600 mb-4">Drag the handles to the corners of the X-ray film. Works with touch.</p> <canvas ref={canvasRef} width={canvasSize.width} height={canvasSize.height} className="bg-gray-900 mx-auto rounded-md cursor-crosshair touch-none" onPointerDown={handleInteractionStart} onPointerMove={handleInteractionMove} onPointerUp={handleInteractionEnd} onPointerCancel={handleInteractionEnd} onPointerLeave={(e) => { setMousePos(null); handleInteractionEnd(e); }} ></canvas> <div className="text-center mt-4"> <button onClick={processKeystone} className="px-6 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-md font-semibold transition-colors">Confirm & Crop</button> </div> </div> );
+      case ProcessingStep.UPLOAD: return (
+        <div className="text-center">
+            <h3 className="text-xl font-semibold mb-4 text-gray-800">Upload X-Ray</h3>
+            <div className="flex justify-center items-center gap-4">
+              <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center gap-2 p-6 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors border">
+                <UploadIcon className="w-12 h-12 text-blue-600" /><span>Upload File</span>
+              </button>
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/png, image/jpeg" className="hidden" />
+              <p className="font-bold text-gray-500">OR</p>
+              <button onClick={() => alert("Camera capture coming soon!")} className="flex flex-col items-center gap-2 p-6 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors border">
+                <CameraIcon className="w-12 h-12 text-blue-600" /><span>Use Camera</span>
+              </button>
+            </div>
+          </div>
+      );
+      case ProcessingStep.KEYSTONE: return (
+          <div>
+            <h3 className="text-lg font-semibold mb-2 text-center text-gray-800">Step 1: Align Film Corners</h3>
+            <p className="text-sm text-center text-gray-600 mb-4">Drag the handles to the corners of the X-ray film. Works with touch.</p>
+            <canvas 
+              ref={canvasRef} 
+              width={canvasSize.width} 
+              height={canvasSize.height} 
+              className="bg-gray-900 mx-auto rounded-md cursor-crosshair touch-none"
+              onPointerDown={handleInteractionStart}
+              onPointerMove={handleInteractionMove}
+              onPointerUp={handleInteractionEnd}
+              onPointerCancel={handleInteractionEnd}
+              onPointerLeave={(e) => {
+                setMousePos(null);
+                handleInteractionEnd(e);
+              }}
+            ></canvas>
+            <div className="text-center mt-4">
+              <button onClick={processKeystone} className="px-6 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-md font-semibold transition-colors">Confirm & Crop</button>
+            </div>
+          </div>
+      );
       case ProcessingStep.ANNOTATE:
         const teethInSlot = slotConfigurations[slotId].teeth;
         let instruction = 'Select a tooth to begin.';
+        
+        // NEW: Dynamic variable for required points
         const requiredPoints = isVertical ? 2 : 4;
+
         if (activeTooth) {
-            if(annotationSubStep === 'DRAW_AXIS') { instruction = `Place 2 points to define the long axis for Tooth ${activeTooth}.`; } 
-            else if (annotationSubStep === 'PLACE_POINTS' && annotationPoints.length < requiredPoints) {
+            if(annotationSubStep === 'DRAW_AXIS') {
+                instruction = `Place 2 points to define the long axis for Tooth ${activeTooth}.`;
+            } else if (annotationSubStep === 'PLACE_POINTS' && annotationPoints.length < requiredPoints) {
+                // NEW: Updated instruction uses the dynamic labels array
                 const labelIndex = isVertical ? annotationPoints.length + 1 : annotationPoints.length;
                 instruction = `Place the ${annotationLabels[labelIndex]} point for Tooth ${activeTooth}.`;
-            } else { instruction = `Analysis for Tooth ${activeTooth} complete.` }
+            } else {
+                instruction = `Analysis for Tooth ${activeTooth} complete.`
+            }
         }
+
         return (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-2">
               <h3 className="text-lg font-semibold mb-2 text-center text-gray-800">Step 2: Analyze Teeth</h3>
               <p className="text-center text-blue-600 h-6 mb-2 font-semibold">{instruction}</p>
-              <canvas ref={canvasRef} width={isVertical ? 360 : 480} height={isVertical ? 480 : 360} className="bg-gray-900 mx-auto rounded-md cursor-crosshair touch-none" onPointerDown={handleInteractionStart} onPointerMove={handleInteractionMove} onPointerUp={handleInteractionEnd} onPointerCancel={handleInteractionEnd} onPointerLeave={(e) => { setMousePos(null); handleInteractionEnd(e); }} ></canvas>
+              <canvas 
+                ref={canvasRef}
+                width={isVertical ? 360 : 480}
+                height={isVertical ? 480 : 360}
+                className="bg-gray-900 mx-auto rounded-md cursor-crosshair touch-none"
+                onPointerDown={handleInteractionStart}
+                onPointerMove={handleInteractionMove}
+                onPointerUp={handleInteractionEnd}
+                onPointerCancel={handleInteractionEnd}
+                onPointerLeave={(e) => {
+                  setMousePos(null);
+                  handleInteractionEnd(e);
+                }}
+              ></canvas>
             </div>
             <div className="md:col-span-1 flex flex-col">
               <div>
@@ -367,9 +479,53 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
                     })}
                 </div>
               </div>
-              {activeTooth && ( <div className="mt-4"> <h4 className="font-semibold mb-2 text-gray-800">Analysis for Tooth {activeTooth}:</h4> {annotationSubStep === 'DRAW_AXIS' && <p className="text-sm text-gray-600">Defining axis... ({toothAxisPoints.length}/2 points)</p>} {annotationSubStep === 'PLACE_POINTS' && ( <> <ul className="space-y-2"> {annotationLabels.slice(1).map((label, i) => ( <li key={label} className="flex items-center gap-2"><span className="w-4 h-4 rounded-full border border-gray-400" style={{ backgroundColor: pointColors[isVertical ? i+1 : i] }}></span><span className={`${annotationPoints.length > i ? 'line-through text-gray-400' : 'text-gray-700'}`}>{label}</span>{annotationPoints.length === i && <span className="text-blue-600 animate-pulse font-bold">&larr; Current</span>}</li> ))} </ul> <div className="mt-4 flex gap-2"> <button onClick={() => { setAnnotationPoints([]); setToothAxisPoints([]); setAnnotationSubStep('DRAW_AXIS'); }} className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm">Reset</button> {annotationPoints.length === requiredPoints && ( <button onClick={analyzePoints} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold">Analyze T{activeTooth}</button> )} </div> </> )} </div> )}
-              {completedReports.length > 0 && ( <div className="mt-4 bg-gray-50 p-3 rounded-lg flex-grow border"> <h4 className="font-semibold text-gray-800 mb-2">Completed Analyses:</h4> <div className="space-y-2 text-sm overflow-y-auto max-h-48"> {completedReports.sort((a,b) => a.toothNumber.localeCompare(b.toothNumber)).map(r => ( <div key={r.toothNumber} className="bg-white p-2 rounded border border-gray-200 shadow-sm"> <p className="font-bold text-base text-gray-800">T{r.toothNumber}: <span className={`font-bold ${ r.prognosis.startsWith(PrognosisLevel.GOOD) || r.prognosis.startsWith('Normal') ? 'text-green-600' : r.prognosis.startsWith(PrognosisLevel.FAIR) || r.prognosis.startsWith('Early') ? 'text-yellow-600' : r.prognosis.startsWith(PrognosisLevel.POOR) || r.prognosis.startsWith('Moderate') ? 'text-orange-600' : 'text-red-600' }`}>{r.prognosis}</span></p> <p className="text-xs text-gray-500"> {r.attachmentLossMm ? `Loss: ${r.attachmentLossMm}mm` : `C:R Ratio: ${r.crownRootRatio} | CAL: ${r.attachmentLossPercent}%`} </p> </div> ))} </div> </div> )}
-               <div className="mt-auto pt-4"> <button onClick={handleSave} className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-md font-semibold text-lg">Save All & Close</button> </div>
+              
+              {activeTooth && (
+                <div className="mt-4">
+                    <h4 className="font-semibold mb-2 text-gray-800">Analysis for Tooth {activeTooth}:</h4>
+                    {annotationSubStep === 'DRAW_AXIS' && <p className="text-sm text-gray-600">Defining axis... ({toothAxisPoints.length}/2 points)</p>}
+                    {annotationSubStep === 'PLACE_POINTS' && (
+                        <>
+                         <ul className="space-y-2">
+                            {/* NEW: Updated list rendering */}
+                            {annotationLabels.slice(1).map((label, i) => (
+                                <li key={label} className="flex items-center gap-2"><span className="w-4 h-4 rounded-full border border-gray-400" style={{ backgroundColor: pointColors[i+1] }}></span><span className={`${annotationPoints.length > i ? 'line-through text-gray-400' : 'text-gray-700'}`}>{label}</span>{annotationPoints.length === i && <span className="text-blue-600 animate-pulse font-bold">&larr; Current</span>}</li>
+                            ))}
+                        </ul>
+                         <div className="mt-4 flex gap-2">
+                             <button onClick={() => { setAnnotationPoints([]); setToothAxisPoints([]); setAnnotationSubStep('DRAW_AXIS'); }} className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm">Reset</button>
+                             {/* NEW: Updated button condition */}
+                             {annotationPoints.length === requiredPoints && (
+                             <button onClick={analyzePoints} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold">Analyze T{activeTooth}</button>
+                             )}
+                         </div>
+                        </>
+                    )}
+                </div>
+              )}
+
+              {completedReports.length > 0 && (
+                <div className="mt-4 bg-gray-50 p-3 rounded-lg flex-grow border">
+                  <h4 className="font-semibold text-gray-800 mb-2">Completed Analyses:</h4>
+                  <div className="space-y-2 text-sm overflow-y-auto max-h-48">
+                    {completedReports.sort((a,b) => a.toothNumber.localeCompare(b.toothNumber)).map(r => (
+                      <div key={r.toothNumber} className="bg-white p-2 rounded border border-gray-200 shadow-sm">
+                        <p className="font-bold text-base text-gray-800">T{r.toothNumber}: <span className={`font-bold ${
+                            r.prognosis.startsWith(PrognosisLevel.GOOD) || r.prognosis.startsWith('Normal') ? 'text-green-600' :
+                            r.prognosis.startsWith(PrognosisLevel.FAIR) || r.prognosis.startsWith('Early') ? 'text-yellow-600' :
+                            r.prognosis.startsWith(PrognosisLevel.POOR) || r.prognosis.startsWith('Moderate') ? 'text-orange-600' : 'text-red-600'
+                          }`}>{r.prognosis}</span></p>
+                        <p className="text-xs text-gray-500">
+                            {r.attachmentLossMm ? `Loss: ${r.attachmentLossMm}mm` : `C:R Ratio: ${r.crownRootRatio} | CAL: ${r.attachmentLossPercent}%`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+               <div className="mt-auto pt-4">
+                  <button onClick={handleSave} className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-md font-semibold text-lg">Save All & Close</button>
+              </div>
             </div>
           </div>
         );
