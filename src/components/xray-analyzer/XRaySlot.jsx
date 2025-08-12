@@ -130,11 +130,13 @@ const XRaySlot = ({ slot, onClick, isVertical, label }) => {
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent pointer-events-none"></div>
           <div className="absolute bottom-0 left-0 right-0 p-1">
             <div className="flex flex-wrap content-start gap-x-1.5 gap-y-0 text-white text-left">
-                {slot.reports.sort((a,b) => a.toothNumber.localeCompare(b.toothNumber)).map(report => (
-                    <p key={report.toothNumber} className="font-bold text-xs shadow-black [text-shadow:1px_1px_2px_var(--tw-shadow-color)]">
-                        <span className="text-gray-300">T{report.toothNumber}:</span> <span className={getPrognosisCharColor(report.prognosis)}>{report.prognosis.charAt(0)}</span>
+                {/* --- MODIFIED CODE --- */}
+                {slot.reports.sort((a,b) => a.toothNumber.localeCompare(b.toothNumber) || a.side.localeCompare(b.side)).map(report => (
+                    <p key={report.id} className="font-bold text-xs shadow-black [text-shadow:1px_1px_2px_var(--tw-shadow-color)]">
+                        <span className="text-gray-300">T{report.toothNumber}{report.side}:</span> <span className={getPrognosisCharColor(report.prognosis)}>{report.prognosis.charAt(0)}</span>
                     </p>
                 ))}
+                {/* --- END MODIFIED CODE --- */}
             </div>
           </div>
         </>

@@ -11,11 +11,11 @@ import PatientInfo from '../PatientInfo';
 
 const TOTAL_SLOTS = 18;
 
-// ----------------- IndexedDB Helpers (no external libs) -----------------
+// IndexedDB Helpers... (omitted for brevity, no changes here)
 const DB_NAME = 'xray-db';
 const DB_VERSION = 1;
-const KV_STORE = 'kv'; // simple key-value store
-const HISTORY_STORE = 'history'; // object store with keyPath: id
+const KV_STORE = 'kv';
+const HISTORY_STORE = 'history';
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -83,7 +83,6 @@ async function idbGetAllHistory() {
   });
 }
 
-// ----------------- App State Helpers -----------------
 const freshState = () => ({
   slots: Array.from({ length: TOTAL_SLOTS }, (_, i) => ({ id: i, processedImage: null, reports: [] })),
   summaryFindings: {
@@ -100,7 +99,6 @@ const freshState = () => ({
   patientName: '',
 });
 
-// Try load from IndexedDB; if empty, migrate from legacy localStorage once
 async function loadInitialState() {
   const fromIDB = await idbGetKV('currentState');
   if (fromIDB) return fromIDB;
@@ -122,7 +120,6 @@ async function loadInitialHistory() {
     const legacy = localStorage.getItem('xrayHistory');
     if (legacy) {
       const parsed = JSON.parse(legacy) || [];
-      // migrate legacy drafts into IDB
       for (const entry of parsed) {
         await idbPutHistory(entry);
       }
@@ -132,18 +129,17 @@ async function loadInitialHistory() {
   return [];
 }
 
-// ----------------- Component -----------------
+
 const XRayApp = () => {
   const [appState, setAppState] = useState(freshState());
   const [history, setHistory] = useState([]);
   const [activeSlotId, setActiveSlotId] = useState(null);
-  const [viewVersion, setViewVersion] = useState(0); // force-refresh children that may hold internal state
+  const [viewVersion, setViewVersion] = useState(0); 
   const [infoBanner, setInfoBanner] = useState('');
   const persistTimer = useRef(null);
 
   const { slots, summaryFindings, patientHN, patientName } = appState;
 
-  // Bootstrap: load state + history from IndexedDB (with legacy migration)
   useEffect(() => {
     (async () => {
       const st = await loadInitialState();
@@ -153,7 +149,6 @@ const XRayApp = () => {
     })();
   }, []);
 
-  // Persist current working state to IndexedDB (debounced to reduce write load)
   useEffect(() => {
     if (persistTimer.current) clearTimeout(persistTimer.current);
     persistTimer.current = setTimeout(async () => {
@@ -176,17 +171,25 @@ const XRayApp = () => {
     setActiveSlotId(null);
   };
 
-  const handleUpdateBoneLossType = (toothNumber, type) => {
-    const newSlots = slots.map((slot) => ({
-      ...slot,
-      reports: (slot.reports || []).map((report) =>
-        report.toothNumber === toothNumber ? { ...report, boneLossType: type } : report
-      ),
-    }));
-    setAppState((prev) => ({ ...prev, slots: newSlots }));
+  // --- MODIFIED CODE ---
+  // This function now correctly finds the specific report by its unique ID and updates it.
+  const handleUpdateBoneLossType = (toothNumber, side, type) => {
+    const reportId = `${toothNumber}${side}`;
+    setAppState(prev => {
+        const newSlots = prev.slots.map(slot => ({
+            ...slot,
+            reports: (slot.reports || []).map(report => {
+                if (report.id === reportId) {
+                    return { ...report, boneLossType: type };
+                }
+                return report;
+            })
+        }));
+        return { ...prev, slots: newSlots };
+    });
   };
+  // --- END MODIFIED CODE ---
 
-  // Auto-draft: HN - Name; store FULL snapshot (including images) in IndexedDB history
   const handleSaveDraft = async () => {
     const draftTitle = `${patientHN || 'NoHN'} - ${patientName || 'NoName'}`;
     const entry = {
@@ -195,7 +198,7 @@ const XRayApp = () => {
       draftTitle,
       patientHN: patientHN || '',
       patientName: patientName || '',
-      data: appState, // FULL snapshot with images
+      data: appState,
     };
     try {
       await idbPutHistory(entry);
@@ -209,7 +212,6 @@ const XRayApp = () => {
 
   const handleLoadDraft = async (id) => {
     try {
-      // load all and find (simple; could be optimized with get by key)
       const all = await idbGetAllHistory();
       const draft = all.find((d) => d.id === id);
       if (draft) {
@@ -281,7 +283,7 @@ const XRayApp = () => {
     };
 
     reader.readAsText(file);
-    event.target.value = null; // allow re-upload of same file
+    event.target.value = null; 
   };
 
   const handleExportPDF = async (hn, name) => {
@@ -313,7 +315,6 @@ const XRayApp = () => {
         pdfInstance.text(`Page ${pageNum} of ${totalPages}`, pdfWidth - margin, margin, { align: 'right' });
       };
 
-      // Page 1
       addHeader(pdf, 1, 3);
       const canvas1 = await html2canvas(section1, canvasOptions);
       const img1Data = canvas1.toDataURL('image/png');
@@ -321,7 +322,6 @@ const XRayApp = () => {
       const pdf1Height = (img1Props.height * contentWidth) / img1Props.width;
       pdf.addImage(img1Data, 'PNG', margin, margin + 14, contentWidth, pdf1Height);
 
-      // Page 2
       loadingIndicator.innerHTML = 'Generating PDF, please wait... (Page 2 of 3)';
       pdf.addPage();
       addHeader(pdf, 2, 3);
@@ -331,7 +331,6 @@ const XRayApp = () => {
       const pdf2Height = (img2Props.height * contentWidth) / img2Props.width;
       pdf.addImage(img2Data, 'PNG', margin, margin + 14, contentWidth, pdf2Height);
 
-      // Page 3
       loadingIndicator.innerHTML = 'Generating PDF, please wait... (Page 3 of 3)';
       pdf.addPage();
       addHeader(pdf, 3, 3);
@@ -356,7 +355,6 @@ const XRayApp = () => {
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 flex flex-col items-center p-4">
       <div className="w-full max-w-7xl">
-        {/* Info banner */}
         {infoBanner && (
           <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">
             {infoBanner}

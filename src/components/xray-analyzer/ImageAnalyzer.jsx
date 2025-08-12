@@ -18,7 +18,6 @@ const projectPointOnLine = (p, a, b) => {
     return { x: a.x + atob.x * t, y: a.y + atob.y * t };
 };
 
-// NEW: The calculated, fixed ratio for calibration.
 const PIXELS_PER_MM = 12;
 
 const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => {
@@ -31,7 +30,9 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
   const [canvasSize, setCanvasSize] = useState({ width: 500, height: 500 });
   
   const [annotationSubStep, setAnnotationSubStep] = useState('SELECT');
-  const [activeTooth, setActiveTooth] = useState(null);
+  // --- MODIFIED STATE ---
+  const [activeTooth, setActiveTooth] = useState(null); // Now an object: { number, side, id }
+  // --- END MODIFIED STATE ---
   const [completedReports, setCompletedReports] = useState([]);
   const [toothAxisPoints, setToothAxisPoints] = useState([]);
   const [annotationPoints, setAnnotationPoints] = useState([]);
@@ -42,11 +43,9 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
   const [mousePos, setMousePos] = useState(null);
   const lastInteractionTime = useRef(0);
 
-  // --- CORRECTED CODE #1 ---
   const analysisType = slotConfigurations[slotId].analysisType;
   const usePaAnalysis = analysisType === 'PA';
   const annotationLabels = usePaAnalysis ? paAnnotationLabels : bwAnnotationLabels;
-  // --- END CORRECTED CODE #1 ---
 
 
   useEffect(() => {
@@ -57,7 +56,6 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     }
   }, [initialData]);
 
-  // Drawing logic is unchanged
   const drawAnalysisLines = (ctx, report, color) => {
     const [axisStart, axisEnd] = report.axis;
     ctx.beginPath();
@@ -111,7 +109,9 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
         img.onload = () => {
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             completedReports.forEach(r => {
-                if(r.toothNumber !== activeTooth) {
+                // --- MODIFIED LOGIC ---
+                if(r.id !== activeTooth?.id) {
+                // --- END MODIFIED LOGIC ---
                     drawAnalysisLines(ctx, r, '#888888');
                 }
             });
@@ -269,40 +269,32 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     const [axisStart, axisEnd] = toothAxisPoints;
     const dist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
     
-    // --- CORRECTED CODE #2 ---
     let reportData = {};
-    // Use the new analysisType to decide the logic
     if (analysisType === 'PA') {
-      // 4-POINT PERIAPICAL ANALYSIS
       if (annotationPoints.length < 4) return;
       const projPoints = annotationPoints.map(p => projectPointOnLine(p, axisStart, axisEnd));
       const [pCrown, pCej, pBone, pApex] = projPoints;
 
-      // Calculate Clinical Crown-to-Root Ratio based on bone level
       const clinicalCrownLen = dist(pCrown, pBone);
       const clinicalRootLen = dist(pBone, pApex);
       if (clinicalRootLen === 0) { alert("Clinical root length (bone to apex) cannot be zero."); return; }
       const crownRootRatio = (clinicalCrownLen / clinicalRootLen).toFixed(2);
 
-      // Calculate Attachment Loss Percentage based on the anatomical root for prognosis
       const anatomicalRootLen = dist(pCej, pApex);
       if (anatomicalRootLen === 0) { alert("Anatomical root length (CEJ to apex) cannot be zero for prognosis."); return; }
       const attachmentLossInPixels = dist(pCej, pBone);
       const attachmentLossPercent = Math.min(100, Math.round((attachmentLossInPixels / anatomicalRootLen) * 100));
       
-      // Calculate attachment loss in mm
       const attachmentLossMm = (attachmentLossInPixels / PIXELS_PER_MM).toFixed(2);
 
-      // Determine prognosis based on attachment loss percentage
       let prognosis;
       if (attachmentLossPercent < 25) prognosis = PrognosisLevel.GOOD;
       else if (attachmentLossPercent <= 50) prognosis = PrognosisLevel.FAIR;
       else if (attachmentLossPercent <= 75) prognosis = PrognosisLevel.POOR;
       else prognosis = PrognosisLevel.QUESTIONABLE;
-      reportData = { toothNumber: activeTooth, crownRootRatio, attachmentLossPercent, prognosis, attachmentLossMm };
+      reportData = { crownRootRatio, attachmentLossPercent, prognosis, attachmentLossMm };
 
     } else { 
-      // 2-POINT BITEWING ANALYSIS
       if (annotationPoints.length < 2) return;
       const [cejPoint, bonePoint] = annotationPoints.map(p => projectPointOnLine(p, axisStart, axisEnd));
       const distanceInPixels = dist(cejPoint, bonePoint);
@@ -312,12 +304,20 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
       else if (distanceInMm <= 2) prognosis = 'Early (E)';
       else if (distanceInMm <= 4) prognosis = 'Moderate (M)';
       else prognosis = 'Advanced (A)';
-      reportData = { toothNumber: activeTooth, prognosis, attachmentLossMm: distanceInMm.toFixed(2), crownRootRatio: 'N/A', attachmentLossPercent: -1, };
+      reportData = { prognosis, attachmentLossMm: distanceInMm.toFixed(2), crownRootRatio: 'N/A', attachmentLossPercent: -1, };
     }
-    // --- END CORRECTED CODE #2 ---
 
-    const newReport = { ...reportData, axis: [axisStart, axisEnd], annotations: annotationPoints };
-    setCompletedReports(prev => [...prev.filter(r => r.toothNumber !== activeTooth), newReport]);
+    // --- MODIFIED LOGIC ---
+    const newReport = { 
+        ...reportData, 
+        id: activeTooth.id, // Use the unique ID
+        toothNumber: activeTooth.number,
+        side: activeTooth.side,
+        axis: [axisStart, axisEnd], 
+        annotations: annotationPoints 
+    };
+    setCompletedReports(prev => [...prev.filter(r => r.id !== activeTooth.id), newReport]);
+    // --- END MODIFIED LOGIC ---
     resetAnnotationState();
   };
 
@@ -334,19 +334,23 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     setAnnotationPoints([]);
   }
   
-  const selectToothForAnalysis = (toothNumber) => {
-    const existingReport = completedReports.find(r => r.toothNumber === toothNumber);
+  // --- MODIFIED FUNCTION ---
+  const selectToothForAnalysis = (toothNumber, side) => {
+    const id = `${toothNumber}${side}`; // Create a unique ID like "18M"
+    const existingReport = completedReports.find(r => r.id === id);
+
     if(existingReport) {
-      setToothAxisPoints(existingReport.axis);
-      setAnnotationPoints(existingReport.annotations);
-      setAnnotationSubStep('PLACE_POINTS');
+        setToothAxisPoints(existingReport.axis);
+        setAnnotationPoints(existingReport.annotations);
+        setAnnotationSubStep('PLACE_POINTS');
     } else {
-      setToothAxisPoints([]);
-      setAnnotationPoints([]);
-      setAnnotationSubStep('DRAW_AXIS');
+        setToothAxisPoints([]);
+        setAnnotationPoints([]);
+        setAnnotationSubStep('DRAW_AXIS');
     }
-    setActiveTooth(toothNumber);
+    setActiveTooth({ number: toothNumber, side, id });
   }
+  // --- END MODIFIED FUNCTION ---
 
   const renderStepContent = () => {
     switch(step) {
@@ -354,14 +358,17 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
       case ProcessingStep.KEYSTONE: return ( <div> <h3 className="text-lg font-semibold mb-2 text-center text-gray-800">Step 1: Align Film Corners</h3> <p className="text-sm text-center text-gray-600 mb-4">Drag the handles to the corners of the X-ray film. Works with touch.</p> <canvas ref={canvasRef} width={canvasSize.width} height={canvasSize.height} className="bg-gray-900 mx-auto rounded-md cursor-crosshair touch-none" onPointerDown={handleInteractionStart} onPointerMove={handleInteractionMove} onPointerUp={handleInteractionEnd} onPointerCancel={handleInteractionEnd} onPointerLeave={(e) => { setMousePos(null); handleInteractionEnd(e); }} ></canvas> <div className="text-center mt-4"> <button onClick={processKeystone} className="px-6 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-md font-semibold transition-colors">Confirm & Crop</button> </div> </div> );
       case ProcessingStep.ANNOTATE:
         const teethInSlot = slotConfigurations[slotId].teeth;
-        let instruction = 'Select a tooth to begin.';
+        let instruction = 'Select a tooth area (M or D) to begin.';
         const requiredPoints = usePaAnalysis ? 4 : 2;
         if (activeTooth) {
-            if(annotationSubStep === 'DRAW_AXIS') { instruction = `Place 2 points to define the long axis for Tooth ${activeTooth}.`; } 
+            // --- MODIFIED LOGIC ---
+            const sideText = activeTooth.side === 'M' ? 'Mesial' : 'Distal';
+            if(annotationSubStep === 'DRAW_AXIS') { instruction = `Place 2 points to define the long axis for T${activeTooth.number} (${sideText}).`; } 
             else if (annotationSubStep === 'PLACE_POINTS' && annotationPoints.length < requiredPoints) {
                 const labelIndex = usePaAnalysis ? annotationPoints.length : annotationPoints.length + 1;
-                instruction = `Place the ${annotationLabels[labelIndex]} point for Tooth ${activeTooth}.`;
-            } else { instruction = `Analysis for Tooth ${activeTooth} complete.` }
+                instruction = `Place the ${annotationLabels[labelIndex]} point for T${activeTooth.number} (${sideText}).`;
+            } else { instruction = `Analysis for T${activeTooth.number} (${sideText}) complete.` }
+            // --- END MODIFIED LOGIC ---
         }
         return (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -372,25 +379,45 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
             </div>
             <div className="md:col-span-1 flex flex-col">
               <div>
-                <h4 className="font-semibold mb-2 text-gray-800">1. Select a tooth to analyze/edit:</h4>
+                <h4 className="font-semibold mb-2 text-gray-800">1. Select a tooth area to analyze/edit:</h4>
+                {/* --- MODIFIED UI --- */}
                 <div className="flex flex-wrap gap-2">
                     {teethInSlot.map(tooth => {
-                        const report = completedReports.find(r => r.toothNumber === tooth);
-                        const baseClass = "px-3 py-1.5 rounded-md text-sm font-semibold transition-colors";
-                        const activeClass = activeTooth === tooth ? "ring-2 ring-offset-2 ring-blue-500" : "";
-                        let colorClass = "bg-gray-200 hover:bg-gray-300 text-gray-700";
-                        if (report?.prognosis) {
-                            if (report.prognosis.startsWith(PrognosisLevel.GOOD) || report.prognosis.startsWith('Normal')) colorClass = 'bg-green-100 text-green-800 hover:bg-green-200';
-                            else if (report.prognosis.startsWith(PrognosisLevel.FAIR) || report.prognosis.startsWith('Early')) colorClass = 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200';
-                            else if (report.prognosis.startsWith(PrognosisLevel.POOR) || report.prognosis.startsWith('Moderate')) colorClass = 'bg-orange-100 text-orange-800 hover:bg-orange-200';
-                            else if (report.prognosis.startsWith(PrognosisLevel.QUESTIONABLE) || report.prognosis.startsWith('Advanced')) colorClass = 'bg-red-100 text-red-800 hover:bg-red-200';
-                        }
-                        return <button key={tooth} onClick={() => selectToothForAnalysis(tooth)} className={`${baseClass} ${activeClass} ${colorClass}`}>T{tooth}</button>
+                        const reportM = completedReports.find(r => r.id === `${tooth}M`);
+                        const reportD = completedReports.find(r => r.id === `${tooth}D`);
+
+                        const getButtonClass = (report) => {
+                            if (!report?.prognosis) return "bg-gray-200 hover:bg-gray-300 text-gray-700";
+                            if (report.prognosis.startsWith(PrognosisLevel.GOOD) || report.prognosis.startsWith('Normal')) return 'bg-green-100 text-green-800 hover:bg-green-200';
+                            if (report.prognosis.startsWith(PrognosisLevel.FAIR) || report.prognosis.startsWith('Early')) return 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200';
+                            if (report.prognosis.startsWith(PrognosisLevel.POOR) || report.prognosis.startsWith('Moderate')) return 'bg-orange-100 text-orange-800 hover:bg-orange-200';
+                            return 'bg-red-100 text-red-800 hover:bg-red-200';
+                        };
+                        
+                        const activeClassM = activeTooth?.id === `${tooth}M` ? "ring-2 ring-offset-2 ring-blue-500" : "";
+                        const activeClassD = activeTooth?.id === `${tooth}D` ? "ring-2 ring-offset-2 ring-blue-500" : "";
+
+                        return (
+                          <div key={tooth} className="flex rounded-md overflow-hidden">
+                            <button onClick={() => selectToothForAnalysis(tooth, 'M')} className={`px-2 py-1.5 text-sm font-semibold transition-colors ${getButtonClass(reportM)} ${activeClassM}`}>
+                                {tooth}M
+                            </button>
+                             <div className="w-px bg-gray-400"></div>
+                            <button onClick={() => selectToothForAnalysis(tooth, 'D')} className={`px-2 py-1.5 text-sm font-semibold transition-colors ${getButtonClass(reportD)} ${activeClassD}`}>
+                                {tooth}D
+                            </button>
+                          </div>
+                        )
                     })}
                 </div>
+                {/* --- END MODIFIED UI --- */}
               </div>
-              {activeTooth && ( <div className="mt-4"> <h4 className="font-semibold mb-2 text-gray-800">Analysis for Tooth {activeTooth}:</h4> {annotationSubStep === 'DRAW_AXIS' && <p className="text-sm text-gray-600">Defining axis... ({toothAxisPoints.length}/2 points)</p>} {annotationSubStep === 'PLACE_POINTS' && ( <> <ul className="space-y-2"> {(usePaAnalysis ? annotationLabels : annotationLabels.slice(1)).map((label, i) => ( <li key={label} className="flex items-center gap-2"><span className="w-4 h-4 rounded-full border border-gray-400" style={{ backgroundColor: pointColors[usePaAnalysis ? i : i+1] }}></span><span className={`${annotationPoints.length > i ? 'line-through text-gray-400' : 'text-gray-700'}`}>{label}</span>{annotationPoints.length === i && <span className="text-blue-600 animate-pulse font-bold">&larr; Current</span>}</li> ))} </ul> <div className="mt-4 flex gap-2"> <button onClick={() => { setAnnotationPoints([]); setToothAxisPoints([]); setAnnotationSubStep('DRAW_AXIS'); }} className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm">Reset</button> {annotationPoints.length === requiredPoints && ( <button onClick={analyzePoints} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold">Analyze T{activeTooth}</button> )} </div> </> )} </div> )}
-              {completedReports.length > 0 && ( <div className="mt-4 bg-gray-50 p-3 rounded-lg flex-grow border"> <h4 className="font-semibold text-gray-800 mb-2">Completed Analyses:</h4> <div className="space-y-2 text-sm overflow-y-auto max-h-48"> {completedReports.sort((a,b) => a.toothNumber.localeCompare(b.toothNumber)).map(r => ( <div key={r.toothNumber} className="bg-white p-2 rounded border border-gray-200 shadow-sm"> <p className="font-bold text-base text-gray-800">T{r.toothNumber}: <span className={`font-bold ${ r.prognosis.startsWith(PrognosisLevel.GOOD) || r.prognosis.startsWith('Normal') ? 'text-green-600' : r.prognosis.startsWith(PrognosisLevel.FAIR) || r.prognosis.startsWith('Early') ? 'text-yellow-600' : r.prognosis.startsWith(PrognosisLevel.POOR) || r.prognosis.startsWith('Moderate') ? 'text-orange-600' : 'text-red-600' }`}>{r.prognosis}</span></p> <p className="text-xs text-gray-500"> {r.attachmentLossPercent !== -1 ? `C:R Ratio: ${r.crownRootRatio} | CAL: ${r.attachmentLossPercent}% | Loss: ${r.attachmentLossMm}mm` : `Loss: ${r.attachmentLossMm}mm`} </p> </div> ))} </div> </div> )}
+              {activeTooth && ( <div className="mt-4"> 
+                {/* --- MODIFIED UI --- */}
+                <h4 className="font-semibold mb-2 text-gray-800">Analysis for Tooth {activeTooth.number} ({activeTooth.side === 'M' ? 'Mesial' : 'Distal'}):</h4> 
+                {/* --- END MODIFIED UI --- */}
+                {annotationSubStep === 'DRAW_AXIS' && <p className="text-sm text-gray-600">Defining axis... ({toothAxisPoints.length}/2 points)</p>} {annotationSubStep === 'PLACE_POINTS' && ( <> <ul className="space-y-2"> {(usePaAnalysis ? annotationLabels : annotationLabels.slice(1)).map((label, i) => ( <li key={label} className="flex items-center gap-2"><span className="w-4 h-4 rounded-full border border-gray-400" style={{ backgroundColor: pointColors[usePaAnalysis ? i : i+1] }}></span><span className={`${annotationPoints.length > i ? 'line-through text-gray-400' : 'text-gray-700'}`}>{label}</span>{annotationPoints.length === i && <span className="text-blue-600 animate-pulse font-bold">&larr; Current</span>}</li> ))} </ul> <div className="mt-4 flex gap-2"> <button onClick={() => { setAnnotationPoints([]); setToothAxisPoints([]); setAnnotationSubStep('DRAW_AXIS'); }} className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm">Reset</button> {annotationPoints.length === requiredPoints && ( <button onClick={analyzePoints} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold">Analyze T{activeTooth.number}{activeTooth.side}</button> )} </div> </> )} </div> )}
+              {completedReports.length > 0 && ( <div className="mt-4 bg-gray-50 p-3 rounded-lg flex-grow border"> <h4 className="font-semibold text-gray-800 mb-2">Completed Analyses:</h4> <div className="space-y-2 text-sm overflow-y-auto max-h-48"> {completedReports.sort((a,b) => a.toothNumber.localeCompare(b.toothNumber) || a.side.localeCompare(b.side)).map(r => ( <div key={r.id} className="bg-white p-2 rounded border border-gray-200 shadow-sm"> <p className="font-bold text-base text-gray-800">T{r.toothNumber}{r.side}: <span className={`font-bold ${ r.prognosis.startsWith(PrognosisLevel.GOOD) || r.prognosis.startsWith('Normal') ? 'text-green-600' : r.prognosis.startsWith(PrognosisLevel.FAIR) || r.prognosis.startsWith('Early') ? 'text-yellow-600' : r.prognosis.startsWith(PrognosisLevel.POOR) || r.prognosis.startsWith('Moderate') ? 'text-orange-600' : 'text-red-600' }`}>{r.prognosis}</span></p> <p className="text-xs text-gray-500"> {r.attachmentLossPercent !== -1 ? `C:R Ratio: ${r.crownRootRatio} | CAL: ${r.attachmentLossPercent}% | Loss: ${r.attachmentLossMm}mm` : `Loss: ${r.attachmentLossMm}mm`} </p> </div> ))} </div> </div> )}
                <div className="mt-auto pt-4"> <button onClick={handleSave} className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-md font-semibold text-lg">Save All & Close</button> </div>
             </div>
           </div>

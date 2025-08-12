@@ -2,43 +2,36 @@ import React, { useState } from 'react';
 import BoneLossModal from './BoneLossModal';
 import ToothSelectionModal from './ToothSelectionModal';
 
-
-// --- NEW COMPONENT FOR PERIODONTAL STAGING ---
 const PeriodontalStagingTable = ({ allReports }) => {
     
-    // Create a simple map for quick lookup of tooth data
     const reportsMap = new Map();
     allReports.forEach(report => {
-        reportsMap.set(report.toothNumber, report);
+        if (!reportsMap.has(report.toothNumber)) {
+            reportsMap.set(report.toothNumber, report);
+        }
     });
 
     const getStagingStatus = (mm) => {
         if (mm === null || typeof mm === 'undefined') return { text: 'N/A', color: 'bg-gray-200' };
-        
         const loss = parseFloat(mm);
         if (isNaN(loss)) return { text: 'N/A', color: 'bg-gray-200' };
-
         if (loss <= 3) return { text: 'Stage I (Early)', color: 'bg-green-200 text-green-800' };
         if (loss <= 5) return { text: 'Stage II (Moderate)', color: 'bg-yellow-200 text-yellow-800' };
         if (loss > 5) return { text: 'Stage III (Advanced)', color: 'bg-red-200 text-red-800' };
         return { text: 'N/A', color: 'bg-gray-200' };
     };
 
-    // Helper to generate a range of tooth numbers
     const range = (start, end) => Array.from({ length: Math.abs(end - start) + 1 }, (_, i) => String(start > end ? start - i : start + i));
 
     const StagingTable = ({ title, rangeLeft, rangeRight }) => (
         <div className="mb-4">
             <h4 className="font-bold text-gray-700 mb-2">{title}</h4>
-            {/* This complex grid class ensures all columns align perfectly. */}
             <div className="grid grid-cols-[auto_repeat(17,_minmax(0,_1fr))] gap-px bg-gray-300 border border-gray-300 rounded-lg overflow-hidden">
-                {/* Row 1: Tooth Numbers */}
                 <div className="bg-gray-200 p-2 font-semibold text-sm text-center">Tooth #</div>
                 {rangeLeft.map(t => <div key={t} className="bg-white p-2 font-mono font-bold text-center">{t}</div>)}
-                <div className="bg-gray-200"></div> {/* Centerline Separator */}
+                <div className="bg-gray-200"></div>
                 {rangeRight.map(t => <div key={t} className="bg-white p-2 font-mono font-bold text-center">{t}</div>)}
 
-                {/* Row 2: Millimeter Data (Read-Only) */}
                 <div className="bg-gray-200 p-2 font-semibold text-sm text-center">Loss (mm)</div>
                 {[...rangeLeft, "spacer", ...rangeRight].map((tooth) => {
                     if (tooth === "spacer") return <div key="spacer-mm" className="bg-gray-200"></div>;
@@ -56,7 +49,6 @@ const PeriodontalStagingTable = ({ allReports }) => {
                     );
                 })}
 
-                {/* Row 3: Diagnostic Status */}
                 <div className="bg-gray-200 p-2 font-semibold text-sm text-center">Diagnostic</div>
                 {[...rangeLeft, "spacer", ...rangeRight].map((tooth) => {
                      if (tooth === "spacer") return <div key="spacer-diag" className="bg-gray-200"></div>;
@@ -84,24 +76,23 @@ const PeriodontalStagingTable = ({ allReports }) => {
     );
 };
 
-
 const ReportSummary = ({ slots, findings, onUpdateFindings, onUpdateBoneLossType }) => {
-    const [boneLossModal, setBoneLossModal] = useState({ isOpen: false, toothReport: null, slot: null });
+    const [boneLossModal, setBoneLossModal] = useState({ isOpen: false, toothReport: null, slot: null, side: null });
     const [toothSelectionModal, setToothSelectionModal] = useState({ isOpen: false, findingKey: null, title: '' });
 
     const allReports = slots.flatMap(slot => 
         slot.reports.map(report => ({ ...report, slotId: slot.id, processedImage: slot.processedImage }))
     );
-
+    
     const boneLossLevels = {
         mild: allReports.filter(r => r.attachmentLossPercent < 25),
         moderate: allReports.filter(r => r.attachmentLossPercent >= 25 && r.attachmentLossPercent <= 50),
         severe: allReports.filter(r => r.attachmentLossPercent > 50),
     };
 
-    const handleToothClick = (toothReport) => {
+    const handleToothClick = (toothReport, side) => {
         const slot = slots.find(s => s.id === toothReport.slotId);
-        setBoneLossModal({ isOpen: true, toothReport, slot });
+        setBoneLossModal({ isOpen: true, toothReport, slot, side });
     };
 
     const handleAddTeethClick = (findingKey, title) => {
@@ -113,19 +104,22 @@ const ReportSummary = ({ slots, findings, onUpdateFindings, onUpdateBoneLossType
         setToothSelectionModal({ isOpen: false, findingKey: null, title: '' });
     };
 
+    // --- MODIFIED CODE ---
+    // This function now correctly displays the (H) or (V) from the `boneLossType` property.
     const renderTooth = (report) => (
-        <button key={report.toothNumber} onClick={() => handleToothClick(report)} className="m-1 px-2 py-1 bg-gray-200 rounded hover:bg-blue-200 transition-colors">
-            {report.toothNumber}
+        <button key={report.id} onClick={() => handleToothClick(report, report.side)} className="m-1 px-2 py-1 bg-gray-200 rounded hover:bg-blue-200 transition-colors">
+            {report.toothNumber}{report.side}
             {report.boneLossType && <span className="ml-1 text-xs font-semibold text-blue-800">({report.boneLossType.charAt(0)})</span>}
         </button>
     );
+    // --- END MODIFIED CODE ---
 
     const FindingSection = ({ title, findingKey }) => (
         <div className="p-4 bg-gray-50 rounded-lg shadow-inner">
             <h4 className="font-bold text-gray-700 mb-2">{title}</h4>
             <div className="flex flex-wrap gap-1 mb-2 min-h-[36px]">
-                {findings[findingKey]?.sort((a, b) => a - b).map(tooth => (
-                    <span key={tooth} className="px-2 py-1 bg-gray-300 text-sm rounded-md">{tooth}</span>
+                {findings[findingKey]?.sort((a, b) => a.tooth - b.tooth).map(tooth => (
+                    <span key={`${tooth.tooth}${tooth.side}`} className="px-2 py-1 bg-gray-300 text-sm rounded-md">{tooth.tooth}{tooth.side}</span>
                 ))}
             </div>
             <button onClick={() => handleAddTeethClick(findingKey, title)} className="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">Add Teeth</button>
@@ -136,10 +130,10 @@ const ReportSummary = ({ slots, findings, onUpdateFindings, onUpdateBoneLossType
         <div className="p-4 bg-white rounded-2xl shadow-xl w-full max-w-7xl mx-auto border border-gray-200">
             <h2 className="text-2xl font-bold text-center mb-6 text-blue-800">Radiographic Findings Summary</h2>
 
-            {/* SECTION 2: Bone Loss and Staging */}
             <div id="pdf-section-2">
                 <div className="bg-gray-100 p-4 rounded-lg mb-6">
                     <h3 className="text-lg font-semibold mb-2">1. Level of Bone Loss (by % of Root)</h3>
+                    <p className="text-sm text-gray-500 mb-4">This section categorizes each analysis by severity based on percentage of bone loss. Click a tooth to specify Horizontal/Vertical bone loss.</p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <h4 className="font-bold">Mild (&lt;25%)</h4>
@@ -154,22 +148,17 @@ const ReportSummary = ({ slots, findings, onUpdateFindings, onUpdateBoneLossType
                             <div className="flex flex-wrap">{boneLossLevels.severe.map(renderTooth)}</div>
                         </div>
                     </div>
-                     <p className="text-xs text-right text-gray-500 mt-2">Click tooth to specify (H)orizontal/(V)ertical bone loss.</p>
                 </div>
                 <PeriodontalStagingTable allReports={allReports} />
             </div>
 
-            {/* SECTION 3: Other Findings */}
             <div id="pdf-section-3" className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Left Column */}
                 <div className="flex flex-col gap-4">
                     <FindingSection title="2. Furcation Involvement" findingKey="furcationInvolvement"/>
                     <FindingSection title="3. Widening PDL" findingKey="wideningPDL" />
                     <FindingSection title="4. Caries Related" findingKey="caries"/>
                     <FindingSection title="5. Defective Restoration" findingKey="defectiveRestoration"/>
                 </div>
-
-                {/* Right Column */}
                 <div className="flex flex-col gap-4">
                     <FindingSection title="6. Visible Calculus" findingKey="calculus"/>
                     <FindingSection title="7. Root Proximity" findingKey="rootProximity"/>
@@ -182,7 +171,8 @@ const ReportSummary = ({ slots, findings, onUpdateFindings, onUpdateBoneLossType
                 <BoneLossModal
                     toothReport={boneLossModal.toothReport}
                     slot={boneLossModal.slot}
-                    onClose={() => setBoneLossModal({ isOpen: false, toothReport: null, slot: null })}
+                    side={boneLossModal.side} // Pass the side to the modal
+                    onClose={() => setBoneLossModal({ isOpen: false, toothReport: null, slot: null, side: null })}
                     onSave={onUpdateBoneLossType}
                 />
             )}
