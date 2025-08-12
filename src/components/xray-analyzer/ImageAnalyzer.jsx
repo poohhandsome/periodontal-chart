@@ -279,14 +279,22 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
       reportData = { toothNumber: activeTooth, prognosis, attachmentLossMm: distanceInMm.toFixed(2), crownRootRatio: 'N/A', attachmentLossPercent: -1, };
     } else {
       if (annotationPoints.length < 4) return;
-      const projPoints = annotationPoints.map(p => projectPointOnLine(p, axisStart, axisEnd));
+            const projPoints = annotationPoints.map(p => projectPointOnLine(p, axisStart, axisEnd));
       const [pCrown, pCej, pBone, pApex] = projPoints;
-      const rootLen = dist(pCej, pApex);
-      if (rootLen === 0) { alert("Root length cannot be zero."); return; }
-      const crownLen = dist(pCrown, pCej);
+
+      // Calculate Clinical Crown-to-Root Ratio based on bone level
+      const clinicalCrownLen = dist(pCrown, pBone);
+      const clinicalRootLen = dist(pBone, pApex);
+      if (clinicalRootLen === 0) { alert("Clinical root length (bone to apex) cannot be zero."); return; }
+      const crownRootRatio = (clinicalCrownLen / clinicalRootLen).toFixed(2);
+
+      // Calculate Attachment Loss Percentage based on the anatomical root for prognosis
+      const anatomicalRootLen = dist(pCej, pApex);
+      if (anatomicalRootLen === 0) { alert("Anatomical root length (CEJ to apex) cannot be zero for prognosis."); return; }
       const attachmentLoss = dist(pCej, pBone);
-      const crownRootRatio = (crownLen / rootLen).toFixed(2);
-      const attachmentLossPercent = Math.min(100, Math.round((attachmentLoss / rootLen) * 100));
+      const attachmentLossPercent = Math.min(100, Math.round((attachmentLoss / anatomicalRootLen) * 100));
+      
+      // Determine prognosis based on attachment loss percentage
       let prognosis;
       if (attachmentLossPercent < 25) prognosis = PrognosisLevel.GOOD;
       else if (attachmentLossPercent <= 50) prognosis = PrognosisLevel.FAIR;
