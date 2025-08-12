@@ -2,84 +2,77 @@ import React, { useState } from 'react';
 import BoneLossModal from './BoneLossModal';
 import ToothSelectionModal from './ToothSelectionModal';
 
+// This is the new component for the diagnostic section.
+// It is defined here for simplicity but could be in its own file.
+const BoneLossDiagnostic = () => {
+    // State to hold the millimeter and status for each tooth
+    const [diagnosticData, setDiagnosticData] = useState({});
 
-// --- NEW COMPONENT FOR PERIODONTAL STAGING ---
-const PeriodontalStagingTable = ({ allReports }) => {
-    
-    // Create a simple map for quick lookup of tooth data
-    const reportsMap = new Map();
-    allReports.forEach(report => {
-        reportsMap.set(report.toothNumber, report);
-    });
-
-    const getStagingStatus = (mm) => {
-        if (mm === null || typeof mm === 'undefined') return { text: 'N/A', color: 'bg-gray-200' };
-        
-        const loss = parseFloat(mm);
-        if (isNaN(loss)) return { text: 'N/A', color: 'bg-gray-200' };
-
-        if (loss <= 3) return { text: 'Stage I (Early)', color: 'bg-green-200 text-green-800' };
-        if (loss <= 5) return { text: 'Stage II (Moderate)', color: 'bg-yellow-200 text-yellow-800' };
-        if (loss > 5) return { text: 'Stage III (Advanced)', color: 'bg-red-200 text-red-800' };
-        return { text: 'N/A', color: 'bg-gray-200' };
+    const handleDataChange = (toothNumber, field, value) => {
+        setDiagnosticData(prev => ({
+            ...prev,
+            [toothNumber]: {
+                ...prev[toothNumber],
+                [field]: value,
+            },
+        }));
     };
 
-    // Helper to generate a range of tooth numbers
-    const range = (start, end) => Array.from({ length: Math.abs(end - start) + 1 }, (_, i) => String(start > end ? start - i : start + i));
+    // Helper to generate a range of numbers
+    const range = (start, end) => Array.from({ length: Math.abs(end - start) + 1 }, (_, i) => start > end ? start - i : start + i);
 
-    const StagingTable = ({ title, rangeLeft, rangeRight }) => (
-        <div className="mb-4">
-            <h4 className="font-bold text-gray-700 mb-2">{title}</h4>
-            {/* This complex grid class ensures all columns align perfectly. */}
-            <div className="grid grid-cols-[auto_repeat(17,_minmax(0,_1fr))] gap-px bg-gray-300 border border-gray-300 rounded-lg overflow-hidden">
-                {/* Row 1: Tooth Numbers */}
-                <div className="bg-gray-200 p-2 font-semibold text-sm text-center">Tooth #</div>
-                {rangeLeft.map(t => <div key={t} className="bg-white p-2 font-mono font-bold text-center">{t}</div>)}
-                <div className="bg-gray-200"></div> {/* Centerline Separator */}
-                {rangeRight.map(t => <div key={t} className="bg-white p-2 font-mono font-bold text-center">{t}</div>)}
+    // Define the four quadrants of teeth as requested
+    const toothRanges = {
+        'Upper Right (18-11)': range(18, 11),
+        'Upper Left (21-28)': range(21, 28),
+        'Lower Left (31-38)': range(38, 31), // Note: user requested 38-31, but standard is 31-38. Reversing to match request.
+        'Lower Right (41-48)': range(41, 48),
+    };
 
-                {/* Row 2: Millimeter Data (Read-Only) */}
-                <div className="bg-gray-200 p-2 font-semibold text-sm text-center">Loss (mm)</div>
-                {[...rangeLeft, "spacer", ...rangeRight].map((tooth) => {
-                    if (tooth === "spacer") return <div key="spacer-mm" className="bg-gray-200"></div>;
-                    const report = reportsMap.get(tooth);
-                    return (
-                        <div key={tooth} className="bg-white p-1">
-                            <input
-                                type="text"
-                                readOnly
-                                value={report?.attachmentLossMm ?? ''}
-                                className="w-full h-full text-center border-none rounded bg-gray-100 cursor-default"
-                                aria-label={`Bone loss for tooth ${tooth}`}
-                            />
-                        </div>
-                    );
-                })}
-
-                {/* Row 3: Diagnostic Status */}
-                <div className="bg-gray-200 p-2 font-semibold text-sm text-center">Diagnostic</div>
-                {[...rangeLeft, "spacer", ...rangeRight].map((tooth) => {
-                     if (tooth === "spacer") return <div key="spacer-diag" className="bg-gray-200"></div>;
-                     const report = reportsMap.get(tooth);
-                     const { text, color } = getStagingStatus(report?.attachmentLossMm);
-                     return (
-                        <div key={tooth} className={`p-2 text-center text-xs font-semibold transition-colors ${color}`}>
-                            {text}
-                        </div>
-                     )
-                })}
-            </div>
-        </div>
+    const StatusButton = ({ tooth, status, currentStatus, onClick }) => (
+        <button
+            onClick={() => onClick(tooth, 'status', status)}
+            className={`w-8 h-8 rounded-md text-sm font-bold transition-colors ${
+                currentStatus === status
+                    ? 'bg-blue-600 text-white shadow'
+                    : 'bg-gray-300 hover:bg-gray-400'
+            }`}
+        >
+            {status}
+        </button>
     );
 
     return (
         <div className="bg-gray-100 p-4 rounded-lg mb-6">
-            <h3 className="text-lg font-semibold mb-3">Periodontal Staging Diagnostic</h3>
-            <p className="text-sm text-gray-600 mb-4">
-                This table reflects the bone loss measurements calculated during the image analysis.
-            </p>
-            <StagingTable title="Maxillary Arch (Upper)" rangeLeft={range(18, 11)} rangeRight={range(21, 28)} />
-            <StagingTable title="Mandibular Arch (Lower)" rangeLeft={range(48, 41)} rangeRight={range(31, 38)} />
+            <h3 className="text-lg font-semibold mb-3">Bone Loss Diagnostic</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                {Object.entries(toothRanges).map(([title, teeth]) => (
+                    <div key={title}>
+                        <h4 className="font-bold text-gray-800 mb-2">{title}</h4>
+                        <div className="space-y-2">
+                            {teeth.map(tooth => (
+                                <div key={tooth} className="grid grid-cols-3 items-center gap-3 p-2 bg-white rounded-md shadow-sm">
+                                    <div className="font-semibold text-gray-700">Tooth #{tooth}</div>
+                                    <div>
+                                        <input
+                                            type="number"
+                                            placeholder="mm"
+                                            value={diagnosticData[tooth]?.mm || ''}
+                                            onChange={(e) => handleDataChange(tooth, 'mm', e.target.value)}
+                                            className="w-full px-2 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        />
+                                    </div>
+                                    <div className="flex justify-end gap-2">
+                                        <StatusButton tooth={tooth} status="E" currentStatus={diagnosticData[tooth]?.status} onClick={handleDataChange} />
+                                        <StatusButton tooth={tooth} status="M" currentStatus={diagnosticData[tooth]?.status} onClick={handleDataChange} />
+                                        <StatusButton tooth={tooth} status="A" currentStatus={diagnosticData[tooth]?.status} onClick={handleDataChange} />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 };
@@ -137,7 +130,7 @@ const ReportSummary = ({ slots, findings, onUpdateFindings, onUpdateBoneLossType
             <h2 className="text-2xl font-bold text-center mb-6 text-blue-800">Radiographic Findings Summary</h2>
 
             <div className="bg-gray-100 p-4 rounded-lg mb-6">
-                <h3 className="text-lg font-semibold mb-2">1. Level of Bone Loss (by % of Root)</h3>
+                <h3 className="text-lg font-semibold mb-2">1. Level of Bone Loss</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <h4 className="font-bold">Mild (&lt;25%)</h4>
@@ -155,8 +148,8 @@ const ReportSummary = ({ slots, findings, onUpdateFindings, onUpdateBoneLossType
                  <p className="text-xs text-right text-gray-500 mt-2">Click tooth to specify (H)orizontal/(V)ertical bone loss.</p>
             </div>
 
-            {/* --- THIS IS THE NEW AUTOMATED STAGING TABLE --- */}
-            <PeriodontalStagingTable allReports={allReports} />
+            {/* --- NEW COMPONENT INSERTED HERE --- */}
+            <BoneLossDiagnostic />
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Left Column */}

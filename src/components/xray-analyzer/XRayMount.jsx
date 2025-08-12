@@ -18,16 +18,16 @@ const XRayMount = ({ slots, onSlotClick }) => {
     return (
         <div className="p-4 bg-white rounded-2xl shadow-xl w-full max-w-7xl mx-auto border border-gray-200">
             <div className="bg-gray-200 p-4 rounded-lg">
-                <div className="grid grid-cols-8 gap-2">
+                <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
                     {/* Column 1 (Patient's Right) - 2 grid columns */}
-                    <div className="col-span-2 flex flex-col gap-2">
+                    <div className="lg:col-span-2 flex flex-col gap-2">
                         <div className="grid grid-cols-2 gap-2">{renderSlot(0)}{renderSlot(1)}</div>
                         <div className="grid grid-cols-2 gap-2">{renderSlot(2)}{renderSlot(3)}</div>
                         <div className="grid grid-cols-2 gap-2">{renderSlot(4)}{renderSlot(5)}</div>
                     </div>
 
                     {/* Column 2 (Anteriors) - 4 grid columns for better spacing */}
-                    <div className="col-span-4 flex flex-col gap-2 justify-between">
+                    <div className="lg:col-span-3 flex flex-col gap-2 justify-between">
                          <div className="grid grid-cols-3 gap-2">
                              {renderSlot(6)}
                              {renderSlot(7)}
@@ -41,7 +41,7 @@ const XRayMount = ({ slots, onSlotClick }) => {
                     </div>
 
                     {/* Column 3 (Patient's Left) - 2 grid columns */}
-                    <div className="col-span-2 flex flex-col gap-2">
+                    <div className="lg:col-span-2 flex flex-col gap-2">
                         <div className="grid grid-cols-2 gap-2">{renderSlot(12)}{renderSlot(13)}</div>
                         <div className="grid grid-cols-2 gap-2">{renderSlot(14)}{renderSlot(15)}</div>
                         <div className="grid grid-cols-2 gap-2">{renderSlot(16)}{renderSlot(17)}</div>

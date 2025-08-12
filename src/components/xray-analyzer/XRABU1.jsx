@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import XRayMount from './XRayMount';
 import ImageAnalyzer from './ImageAnalyzer';
-import ReportSummary from './ReportSummary';
+import ReportSummary from './ReportSummary'; // Import the new component
 import { slotConfigurations } from '../../xray-config';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -40,8 +40,7 @@ const XRayApp = () => {
     const [slots, setSlots] = useState(() => loadSavedData('xrayMountData', initialSlots));
     const [summaryFindings, setSummaryFindings] = useState(() => loadSavedData('xraySummaryFindings', initialFindings));
     const [activeSlotId, setActiveSlotId] = useState(null);
-    // REMOVED: The 'view' state is no longer needed as both components are shown.
-    // const [view, setView] = useState('mount');
+    const [view, setView] = useState('mount'); // 'mount' or 'summary'
 
     useEffect(() => {
         try {
@@ -84,13 +83,6 @@ const XRayApp = () => {
             )
         })));
     };
-    
-    // ADDED: A handler for the new "Back to Home" button.
-    // You should replace this with your application's router logic.
-    const handleGoHome = () => {
-        // Example: window.location.href = '/dashboard';
-        alert("Navigating back to the home page.");
-    };
 
     const activeSlot = activeSlotId !== null ? slots.find(s => s.id === activeSlotId) : null;
     const initialAnalyzerData = activeSlot?.processedImage ? {
@@ -121,12 +113,10 @@ const XRayApp = () => {
             pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
             
             pdf.setFontSize(18);
-            // UPDATED: PDF title is now static since both views are combined.
-            const title = 'Dental X-Ray Analysis Report';
+            const title = view === 'mount' ? 'Dental X-Ray Analysis Report' : 'Radiographic Findings Summary';
             pdf.text(title, pdfWidth / 2, pdfHeight - 15, { align: 'center' });
-            
-            // UPDATED: PDF filename is now static.
-            pdf.save('xray-analysis-report.pdf');
+
+            pdf.save(`${view}-report.pdf`);
         });
     };
 
@@ -134,12 +124,11 @@ const XRayApp = () => {
         <div className="min-h-screen bg-gray-100 text-gray-800 flex flex-col items-center p-4">
             <div className="w-full max-w-7xl">
                 <header className="text-center mb-8 relative flex justify-between items-center">
-                    {/* ADDED: "Back to Home" button */}
                     <button 
-                        onClick={handleGoHome} 
-                        className="bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors"
+                        onClick={() => setView(view === 'mount' ? 'summary' : 'mount')} 
+                        className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
                     >
-                        Back to Home
+                        {view === 'mount' ? 'View Report Summary' : 'View X-Ray Mount'}
                     </button>
                     <div>
                         <h1 className="text-4xl font-bold text-blue-700">Dental X-Ray Prognosis Assistant</h1>
@@ -153,20 +142,17 @@ const XRayApp = () => {
                     </button>
                 </header>
 
-                {/* UPDATED: The main section now renders both components sequentially. */}
                 <main className="w-full" ref={pageRef}>
-                    {/* The X-Ray Mount is always visible */}
-                    <XRayMount slots={slots} onSlotClick={handleSlotClick} />
-                    
-                    {/* The Report Summary is now displayed directly below the mount */}
-                    <div className="mt-8"> {/* Added margin-top for spacing */}
+                    {view === 'mount' ? (
+                        <XRayMount slots={slots} onSlotClick={handleSlotClick} />
+                    ) : (
                         <ReportSummary 
                             slots={slots} 
                             findings={summaryFindings}
                             onUpdateFindings={setSummaryFindings}
                             onUpdateBoneLossType={handleUpdateBoneLossType}
                         />
-                    </div>
+                    )}
                 </main>
 
                 <footer className="text-center mt-8 text-gray-600 text-sm">
@@ -181,7 +167,7 @@ const XRayApp = () => {
                     isVertical={slotConfigurations[activeSlotId].isVertical}
                     initialData={initialAnalyzerData}
                     onClose={handleCloseAnalyzer}
-                    onSave={onSaveReport}
+                    onSave={handleSaveReport}
                 />
             )}
         </div>
