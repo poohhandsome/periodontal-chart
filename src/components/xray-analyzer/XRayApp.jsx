@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import XRayMount from './XRayMount';
 import ImageAnalyzer from './ImageAnalyzer';
 import ReportSummary from './ReportSummary';
@@ -11,13 +11,81 @@ import PatientInfo from '../PatientInfo';
 
 const TOTAL_SLOTS = 18;
 
-// --- helpers ---------------------------------------------------------------
+// ----------------- IndexedDB Helpers (no external libs) -----------------
+const DB_NAME = 'xray-db';
+const DB_VERSION = 1;
+const KV_STORE = 'kv'; // simple key-value store
+const HISTORY_STORE = 'history'; // object store with keyPath: id
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(KV_STORE)) db.createObjectStore(KV_STORE);
+      if (!db.objectStoreNames.contains(HISTORY_STORE)) db.createObjectStore(HISTORY_STORE, { keyPath: 'id' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbSetKV(key, value) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(KV_STORE, 'readwrite');
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.objectStore(KV_STORE).put(value, key);
+  });
+}
+
+async function idbGetKV(key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(KV_STORE, 'readonly');
+    tx.onerror = () => reject(tx.error);
+    const req = tx.objectStore(KV_STORE).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPutHistory(entry) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HISTORY_STORE, 'readwrite');
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.objectStore(HISTORY_STORE).put(entry);
+  });
+}
+
+async function idbDeleteHistory(id) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HISTORY_STORE, 'readwrite');
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.objectStore(HISTORY_STORE).delete(id);
+  });
+}
+
+async function idbGetAllHistory() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HISTORY_STORE, 'readonly');
+    tx.onerror = () => reject(tx.error);
+    const store = tx.objectStore(HISTORY_STORE);
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// ----------------- App State Helpers -----------------
 const freshState = () => ({
-  slots: Array.from({ length: TOTAL_SLOTS }, (_, i) => ({
-    id: i,
-    processedImage: null,
-    reports: [],
-  })),
+  slots: Array.from({ length: TOTAL_SLOTS }, (_, i) => ({ id: i, processedImage: null, reports: [] })),
   summaryFindings: {
     furcationInvolvement: [],
     wideningPDL: [],
@@ -32,49 +100,78 @@ const freshState = () => ({
   patientName: '',
 });
 
-const getInitialState = () => {
-  const savedState = localStorage.getItem('xrayCurrentState');
-  if (savedState) {
-    try {
-      return JSON.parse(savedState);
-    } catch (e) {
-      console.error('Failed to parse saved X-ray state:', e);
-      return freshState();
+// Try load from IndexedDB; if empty, migrate from legacy localStorage once
+async function loadInitialState() {
+  const fromIDB = await idbGetKV('currentState');
+  if (fromIDB) return fromIDB;
+  try {
+    const legacy = localStorage.getItem('xrayCurrentState');
+    if (legacy) {
+      const parsed = JSON.parse(legacy);
+      await idbSetKV('currentState', parsed);
+      return parsed;
     }
-  }
+  } catch {}
   return freshState();
-};
+}
 
-// --- component ------------------------------------------------------------
+async function loadInitialHistory() {
+  const all = await idbGetAllHistory();
+  if (all && all.length) return all.sort((a, b) => b.id - a.id);
+  try {
+    const legacy = localStorage.getItem('xrayHistory');
+    if (legacy) {
+      const parsed = JSON.parse(legacy) || [];
+      // migrate legacy drafts into IDB
+      for (const entry of parsed) {
+        await idbPutHistory(entry);
+      }
+      return parsed.sort((a, b) => b.id - a.id);
+    }
+  } catch {}
+  return [];
+}
+
+// ----------------- Component -----------------
 const XRayApp = () => {
-  const [appState, setAppState] = useState(getInitialState);
-  const [history, setHistory] = useState(() => {
-    const savedHistory = localStorage.getItem('xrayHistory');
-    try { return savedHistory ? JSON.parse(savedHistory) : []; } catch { return []; }
-  });
+  const [appState, setAppState] = useState(freshState());
+  const [history, setHistory] = useState([]);
   const [activeSlotId, setActiveSlotId] = useState(null);
-  // Bump this to force-remount child components that may keep internal state
-  const [viewVersion, setViewVersion] = useState(0);
+  const [viewVersion, setViewVersion] = useState(0); // force-refresh children that may hold internal state
+  const [infoBanner, setInfoBanner] = useState('');
+  const persistTimer = useRef(null);
 
   const { slots, summaryFindings, patientHN, patientName } = appState;
 
-  // persist current working state
+  // Bootstrap: load state + history from IndexedDB (with legacy migration)
   useEffect(() => {
-    localStorage.setItem('xrayCurrentState', JSON.stringify(appState));
-  }, [appState]);
+    (async () => {
+      const st = await loadInitialState();
+      setAppState(st);
+      const hist = await loadInitialHistory();
+      setHistory(hist);
+    })();
+  }, []);
 
-  // persist history list
+  // Persist current working state to IndexedDB (debounced to reduce write load)
   useEffect(() => {
-    localStorage.setItem('xrayHistory', JSON.stringify(history));
-  }, [history]);
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(async () => {
+      try {
+        await idbSetKV('currentState', appState);
+      } catch (e) {
+        console.error('Failed to persist current state to IndexedDB', e);
+        setInfoBanner('Could not save current work to device storage.');
+      }
+    }, 400);
+    return () => persistTimer.current && clearTimeout(persistTimer.current);
+  }, [appState]);
 
   const handleSlotClick = (id) => setActiveSlotId(id);
   const handleCloseAnalyzer = () => setActiveSlotId(null);
 
   const handleSaveReport = (updatedSlotData) => {
-    const newSlots = slots.map((slot) =>
-      slot.id === updatedSlotData.id ? { ...slot, ...updatedSlotData } : slot
-    );
+    const newSlots = slots.map((slot) => (slot.id === updatedSlotData.id ? { ...slot, ...updatedSlotData } : slot));
     setAppState((prev) => ({ ...prev, slots: newSlots }));
     setActiveSlotId(null);
   };
@@ -82,59 +179,72 @@ const XRayApp = () => {
   const handleUpdateBoneLossType = (toothNumber, type) => {
     const newSlots = slots.map((slot) => ({
       ...slot,
-      reports: slot.reports.map((report) =>
+      reports: (slot.reports || []).map((report) =>
         report.toothNumber === toothNumber ? { ...report, boneLossType: type } : report
       ),
     }));
     setAppState((prev) => ({ ...prev, slots: newSlots }));
   };
 
-  // Auto-draft: uses current HN/Name, no prompt
-  const handleSaveDraft = () => {
+  // Auto-draft: HN - Name; store FULL snapshot (including images) in IndexedDB history
+  const handleSaveDraft = async () => {
     const draftTitle = `${patientHN || 'NoHN'} - ${patientName || 'NoName'}`;
-    const newHistoryEntry = {
+    const entry = {
       id: Date.now(),
       date: new Date().toISOString(),
-      draftTitle,                // human-readable title
+      draftTitle,
       patientHN: patientHN || '',
       patientName: patientName || '',
-      data: appState,            // full app snapshot
+      data: appState, // FULL snapshot with images
     };
-    setHistory((prev) => [newHistoryEntry, ...prev]);
-    alert('Draft saved successfully!');
-  };
-
-  const handleLoadDraft = (id) => {
-    const draftToLoad = history.find((item) => item.id === id);
-    if (draftToLoad) {
-      setAppState(draftToLoad.data);
-      setViewVersion((v) => v + 1); // ensure children refresh if they hold local state
-      alert(`Draft "${draftToLoad.draftTitle || draftToLoad.patientName}" loaded successfully.`);
+    try {
+      await idbPutHistory(entry);
+      setHistory((prev) => [entry, ...prev]);
+      setInfoBanner('Draft saved to device (IndexedDB).');
+    } catch (e) {
+      console.error('Failed to save draft to IndexedDB', e);
+      setInfoBanner('Failed to save draft to device storage.');
     }
   };
 
-  const handleDeleteDraft = (id) => {
-    if (window.confirm('Are you sure you want to delete this draft?')) {
-      setHistory((prev) => prev.filter((item) => item.id !== id));
+  const handleLoadDraft = async (id) => {
+    try {
+      // load all and find (simple; could be optimized with get by key)
+      const all = await idbGetAllHistory();
+      const draft = all.find((d) => d.id === id);
+      if (draft) {
+        setAppState(draft.data);
+        setViewVersion((v) => v + 1);
+        setInfoBanner('Draft loaded from device.');
+      }
+    } catch (e) {
+      console.error('Failed to load draft', e);
+      setInfoBanner('Failed to load draft.');
+    }
+  };
+
+  const handleDeleteDraft = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this draft?')) return;
+    try {
+      await idbDeleteHistory(id);
+      setHistory((prev) => prev.filter((i) => i.id !== id));
+      setInfoBanner('Draft deleted.');
+    } catch (e) {
+      console.error('Failed to delete draft', e);
+      setInfoBanner('Failed to delete draft.');
     }
   };
 
   const handleClearChart = () => {
-    if (
-      window.confirm(
-        'Are you sure you want to clear the current chart data? This will not affect your saved history.'
-      )
-    ) {
+    if (window.confirm('Clear the current chart? Saved history remains.')) {
       setAppState(freshState());
       setViewVersion((v) => v + 1);
-      alert('Chart has been cleared.');
+      setInfoBanner('Chart cleared.');
     }
   };
 
   const handleDownload = () => {
-    const blob = new Blob([JSON.stringify(appState, null, 2)], {
-      type: 'application/json',
-    });
+    const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -150,23 +260,20 @@ const XRayApp = () => {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const loadedData = JSON.parse(e.target.result);
-        const required =
-          loadedData &&
-          loadedData.slots &&
-          loadedData.summaryFindings &&
-          'patientHN' in loadedData &&
-          'patientName' in loadedData;
-
-        if (required) {
-          setAppState(loadedData);
-          setViewVersion((v) => v + 1); // refresh child components
-          alert('X-Ray analysis file loaded successfully!');
-        } else {
+        const hasCore =
+          loadedData && loadedData.slots && loadedData.summaryFindings && 'patientHN' in loadedData && 'patientName' in loadedData;
+        if (!hasCore) {
           alert('Invalid X-Ray analysis file format.');
+          return;
         }
+
+        setAppState(loadedData);
+        setViewVersion((v) => v + 1);
+        try { await idbSetKV('currentState', loadedData); } catch {}
+        setInfoBanner('File loaded.');
       } catch (error) {
         console.error('Error parsing uploaded file:', error);
         alert('Error reading or parsing the file.');
@@ -174,8 +281,7 @@ const XRayApp = () => {
     };
 
     reader.readAsText(file);
-    // allow re-uploading the same file
-    event.target.value = null;
+    event.target.value = null; // allow re-upload of same file
   };
 
   const handleExportPDF = async (hn, name) => {
@@ -190,8 +296,7 @@ const XRayApp = () => {
 
     const loadingIndicator = document.createElement('div');
     loadingIndicator.innerHTML = 'Generating PDF, please wait... (Page 1 of 3)';
-    loadingIndicator.style.cssText =
-      'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px; background: white; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.2); z-index: 1000;';
+    loadingIndicator.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px; background: white; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.2); z-index: 1000;';
     document.body.appendChild(loadingIndicator);
 
     try {
@@ -251,6 +356,13 @@ const XRayApp = () => {
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 flex flex-col items-center p-4">
       <div className="w-full max-w-7xl">
+        {/* Info banner */}
+        {infoBanner && (
+          <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+            {infoBanner}
+          </div>
+        )}
+
         <header className="text-center mb-8 relative flex justify-between items-center">
           <a href="#" className="text-blue-600 hover:text-blue-800 font-semibold">&larr; Back to Home</a>
           <div>
