@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import XRayMount from './XRayMount';
 import ImageAnalyzer from './ImageAnalyzer';
+import ReportSummary from './ReportSummary'; // Import the new component
 import { slotConfigurations } from '../../xray-config';
-import jsPDF from 'jspdf'; // 2. Import jsPDF
-import html2canvas from 'html2canvas'; // 3. Import html2canvas
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const TOTAL_SLOTS = 18;
 
@@ -12,115 +13,165 @@ const initialSlots = Array.from({ length: TOTAL_SLOTS }, (_, i) => ({
   processedImage: null,
   reports: [],
 }));
+
+const initialFindings = {
+    furcationInvolvement: [],
+    wideningPDL: [],
+    caries: [],
+    defectiveRestoration: [],
+    calculus: [],
+    rootProximity: [],
+    periapicalLesion: [],
+    other: [],
+};
+
 // Function to load data from localStorage
-const loadSavedData = () => {
+const loadSavedData = (key, initialData) => {
   try {
-    const savedData = localStorage.getItem('xrayMountData');
-    return savedData ? JSON.parse(savedData) : initialSlots;
+    const savedData = localStorage.getItem(key);
+    return savedData ? JSON.parse(savedData) : initialData;
   } catch (error) {
-    console.error("Could not load saved X-ray data:", error);
-    return initialSlots;
+    console.error(`Could not load saved data for ${key}:`, error);
+    return initialData;
   }
 };
 
 const XRayApp = () => {
-    // 2. Initialize state by loading saved data
-  const [slots, setSlots] = useState(loadSavedData);
-  const [activeSlotId, setActiveSlotId] = useState(null);
+    const [slots, setSlots] = useState(() => loadSavedData('xrayMountData', initialSlots));
+    const [summaryFindings, setSummaryFindings] = useState(() => loadSavedData('xraySummaryFindings', initialFindings));
+    const [activeSlotId, setActiveSlotId] = useState(null);
+    const [view, setView] = useState('mount'); // 'mount' or 'summary'
 
-  // 3. Add this useEffect hook to save data on any change
-  useEffect(() => {
-    try {
-      localStorage.setItem('xrayMountData', JSON.stringify(slots));
-    } catch (error) {
-      console.error("Could not save X-ray data:", error);
-    }
-  }, [slots]); // This hook runs whenever the 'slots' state changes
+    useEffect(() => {
+        try {
+            localStorage.setItem('xrayMountData', JSON.stringify(slots));
+        } catch (error) {
+            console.error("Could not save X-ray data:", error);
+        }
+    }, [slots]);
 
-  const handleSlotClick = (id) => {
-    setActiveSlotId(id);
-  };
+    useEffect(() => {
+        try {
+            localStorage.setItem('xraySummaryFindings', JSON.stringify(summaryFindings));
+        } catch (error) {
+            console.error("Could not save summary findings:", error);
+        }
+    }, [summaryFindings]);
 
-  const handleCloseAnalyzer = () => {
-    setActiveSlotId(null);
-  };
+    const handleSlotClick = (id) => {
+        setActiveSlotId(id);
+    };
 
-  const handleSaveReport = (updatedSlotData) => {
-    setSlots(prevSlots =>
-      prevSlots.map(slot =>
-        slot.id === updatedSlotData.id ? { ...slot, ...updatedSlotData } : slot
-      )
-    );
-    setActiveSlotId(null);
-  };
+    const handleCloseAnalyzer = () => {
+        setActiveSlotId(null);
+    };
 
-  const activeSlot = activeSlotId !== null ? slots.find(s => s.id === activeSlotId) : null;
-  const initialAnalyzerData = activeSlot?.processedImage ? {
-      processedImage: activeSlot.processedImage,
-      reports: activeSlot.reports
-  } : undefined;
-  const xrayMountRef = useRef(null);
-  const handleExportPDF = () => {
-    const mountElement = xrayMountRef.current;
-    if (!mountElement) return;
+    const handleSaveReport = (updatedSlotData) => {
+        setSlots(prevSlots =>
+            prevSlots.map(slot =>
+                slot.id === updatedSlotData.id ? { ...slot, ...updatedSlotData } : slot
+            )
+        );
+        setActiveSlotId(null);
+    };
 
-    // Use html2canvas to capture the mount as an image
-    html2canvas(mountElement).then(canvas => {
-      const imgData = canvas.toDataURL('image/png');
-      
-      // Create a new PDF document
-      // 'l' for landscape, 'mm' for millimeters, 'a4' for size
-      const pdf = new jsPDF('l', 'mm', 'a4'); 
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      
-      // Add the captured image to the PDF
-      pdf.addImage(imgData, 'PNG', 10, 10, pdfWidth - 20, 0, undefined, 'FAST');
-      
-      // Add title and other details
-      pdf.setFontSize(18);
-      pdf.text('Dental X-Ray Analysis Report', pdfWidth / 2, pdfHeight - 15, { align: 'center' });
+    const handleUpdateBoneLossType = (toothNumber, type) => {
+        setSlots(prevSlots => prevSlots.map(slot => ({
+            ...slot,
+            reports: slot.reports.map(report => 
+                report.toothNumber === toothNumber ? { ...report, boneLossType: type } : report
+            )
+        })));
+    };
 
-      // Save the PDF
-      pdf.save("xray-report.pdf");
-    });
-  };
-  return (
-    <div className="min-h-screen bg-gray-100 text-gray-800 flex flex-col items-center p-4">
-        <div className="w-full max-w-7xl">
-            <header className="text-center mb-8 relative">
-                <a href="#" className="absolute left-0 top-1/2 -translate-y-1/2 text-blue-600 hover:text-blue-800 font-semibold">&larr; Back to Home</a>
-                <h1 className="text-4xl font-bold text-blue-700">Dental X-Ray Prognosis Assistant</h1>
-                <p className="text-lg text-gray-600 mt-2">Upload, analyze, and diagnose periodontal health based on McGuire & Nunn (1996).</p>
-                <button 
-                  onClick={handleExportPDF} 
-                  className="absolute right-0 top-1/2 -translate-y-1/2 bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  Export as PDF
-                </button>
-            </header>
+    const activeSlot = activeSlotId !== null ? slots.find(s => s.id === activeSlotId) : null;
+    const initialAnalyzerData = activeSlot?.processedImage ? {
+        processedImage: activeSlot.processedImage,
+        reports: activeSlot.reports
+    } : undefined;
+    
+    const pageRef = useRef(null);
+    const handleExportPDF = () => {
+        const mountElement = pageRef.current;
+        if (!mountElement) return;
+
+        html2canvas(mountElement, { scale: 2 }).then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('l', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+            const ratio = canvasWidth / canvasHeight;
+            const imgWidth = pdfWidth - 20;
+            const imgHeight = imgWidth / ratio;
+            let position = 10;
+            if (imgHeight > pdfHeight - 40) {
+                 position = 5;
+            }
+
+            pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
             
-            <main className="w-full" ref={xrayMountRef}>
-                <XRayMount slots={slots} onSlotClick={handleSlotClick} />
-            </main>
+            pdf.setFontSize(18);
+            const title = view === 'mount' ? 'Dental X-Ray Analysis Report' : 'Radiographic Findings Summary';
+            pdf.text(title, pdfWidth / 2, pdfHeight - 15, { align: 'center' });
 
-            <footer className="text-center mt-8 text-gray-600 text-sm">
-                <p>This tool is for educational and illustrative purposes only. Not for clinical diagnosis.</p>
-                <p>Prognosis based on simplified CAL % from McGuire, M. K., & Nunn, M. E. (1996).</p>
-            </footer>
+            pdf.save(`${view}-report.pdf`);
+        });
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-100 text-gray-800 flex flex-col items-center p-4">
+            <div className="w-full max-w-7xl">
+                <header className="text-center mb-8 relative flex justify-between items-center">
+                    <button 
+                        onClick={() => setView(view === 'mount' ? 'summary' : 'mount')} 
+                        className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                        {view === 'mount' ? 'View Report Summary' : 'View X-Ray Mount'}
+                    </button>
+                    <div>
+                        <h1 className="text-4xl font-bold text-blue-700">Dental X-Ray Prognosis Assistant</h1>
+                        <p className="text-lg text-gray-600 mt-2">Upload, analyze, and diagnose periodontal health based on McGuire & Nunn (1996).</p>
+                    </div>
+                    <button
+                        onClick={handleExportPDF}
+                        className="bg-green-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                        Export as PDF
+                    </button>
+                </header>
+
+                <main className="w-full" ref={pageRef}>
+                    {view === 'mount' ? (
+                        <XRayMount slots={slots} onSlotClick={handleSlotClick} />
+                    ) : (
+                        <ReportSummary 
+                            slots={slots} 
+                            findings={summaryFindings}
+                            onUpdateFindings={setSummaryFindings}
+                            onUpdateBoneLossType={handleUpdateBoneLossType}
+                        />
+                    )}
+                </main>
+
+                <footer className="text-center mt-8 text-gray-600 text-sm">
+                    <p>This tool is for educational and illustrative purposes only. Not for clinical diagnosis.</p>
+                    <p>Prognosis based on simplified CAL % from McGuire, M. K., & Nunn, M. E. (1996).</p>
+                </footer>
+            </div>
+
+            {activeSlotId !== null && (
+                <ImageAnalyzer
+                    slotId={activeSlotId}
+                    isVertical={slotConfigurations[activeSlotId].isVertical}
+                    initialData={initialAnalyzerData}
+                    onClose={handleCloseAnalyzer}
+                    onSave={handleSaveReport}
+                />
+            )}
         </div>
-
-        {activeSlotId !== null && (
-            <ImageAnalyzer
-                slotId={activeSlotId}
-                isVertical={slotConfigurations[activeSlotId].isVertical}
-                initialData={initialAnalyzerData}
-                onClose={handleCloseAnalyzer}
-                onSave={handleSaveReport}
-            />
-        )}
-    </div>
-  );
+    );
 };
 
 export default XRayApp;
