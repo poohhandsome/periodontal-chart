@@ -136,29 +136,31 @@ const ReportSummary = ({ slots, findings, onUpdateFindings, onUpdateBoneLossType
         <div className="p-4 bg-white rounded-2xl shadow-xl w-full max-w-7xl mx-auto border border-gray-200">
             <h2 className="text-2xl font-bold text-center mb-6 text-blue-800">Radiographic Findings Summary</h2>
 
-            <div className="bg-gray-100 p-4 rounded-lg mb-6">
-                <h3 className="text-lg font-semibold mb-2">1. Level of Bone Loss (by % of Root)</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <h4 className="font-bold">Mild (&lt;25%)</h4>
-                        <div className="flex flex-wrap">{boneLossLevels.mild.map(renderTooth)}</div>
+            {/* SECTION 2: Bone Loss and Staging */}
+            <div id="pdf-section-2">
+                <div className="bg-gray-100 p-4 rounded-lg mb-6">
+                    <h3 className="text-lg font-semibold mb-2">1. Level of Bone Loss (by % of Root)</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <h4 className="font-bold">Mild (&lt;25%)</h4>
+                            <div className="flex flex-wrap">{boneLossLevels.mild.map(renderTooth)}</div>
+                        </div>
+                        <div>
+                            <h4 className="font-bold">Moderate (25-50%)</h4>
+                            <div className="flex flex-wrap">{boneLossLevels.moderate.map(renderTooth)}</div>
+                        </div>
+                        <div>
+                            <h4 className="font-bold">Severe (&gt;50%)</h4>
+                            <div className="flex flex-wrap">{boneLossLevels.severe.map(renderTooth)}</div>
+                        </div>
                     </div>
-                    <div>
-                        <h4 className="font-bold">Moderate (25-50%)</h4>
-                        <div className="flex flex-wrap">{boneLossLevels.moderate.map(renderTooth)}</div>
-                    </div>
-                    <div>
-                        <h4 className="font-bold">Severe (&gt;50%)</h4>
-                        <div className="flex flex-wrap">{boneLossLevels.severe.map(renderTooth)}</div>
-                    </div>
+                     <p className="text-xs text-right text-gray-500 mt-2">Click tooth to specify (H)orizontal/(V)ertical bone loss.</p>
                 </div>
-                 <p className="text-xs text-right text-gray-500 mt-2">Click tooth to specify (H)orizontal/(V)ertical bone loss.</p>
+                <PeriodontalStagingTable allReports={allReports} />
             </div>
 
-            {/* --- THIS IS THE NEW AUTOMATED STAGING TABLE --- */}
-            <PeriodontalStagingTable allReports={allReports} />
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* SECTION 3: Other Findings */}
+            <div id="pdf-section-3" className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Left Column */}
                 <div className="flex flex-col gap-4">
                     <FindingSection title="2. Furcation Involvement" findingKey="furcationInvolvement"/>
