@@ -10,6 +10,7 @@ const EditInput = ({ label, value, onFocus, onChange }) => (
             value={value ?? ''}
             onFocus={onFocus}
             onChange={e => onChange(e.target.value)}
+            readOnly
             className="w-16 h-12 mt-1 text-center text-xl font-bold bg-gray-100 border-2 border-transparent focus:border-blue-500 focus:bg-white rounded-md outline-none"
         />
     </div>
