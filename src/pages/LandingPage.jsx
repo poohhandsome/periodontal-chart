@@ -1,5 +1,6 @@
 // src/pages/LandingPage.jsx
-import React from 'react';
+import React, { useState } from 'react';
+import ReleaseNotesModal from '../components/ReleaseNotesModal';
 
 const ToolCard = ({ title, description, href, icon, isBeta = false }) => (
     <a href={href} className="group block p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transform hover:-translate-y-2 transition-all duration-300">
@@ -20,6 +21,8 @@ const ToolCard = ({ title, description, href, icon, isBeta = false }) => (
 
 
 const LandingPage = () => {
+    const [isReleaseNotesOpen, setReleaseNotesOpen] = useState(false);
+
     const PeriodontalIcon = () => (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg>
     );
@@ -98,7 +101,16 @@ const LandingPage = () => {
             </div>
         </footer>
 
-        {/* --- NEW QR DONATE BUTTON --- */}
+        {/* --- VERSION BUTTON --- */}
+        <button 
+            onClick={() => setReleaseNotesOpen(true)}
+            className="fixed bottom-6 left-6 bg-gray-700 text-white px-4 py-2 rounded-full shadow-lg hover:bg-gray-800 transform hover:scale-105 transition-all duration-200 text-sm font-semibold"
+            title="View Release Notes"
+        >
+            Version 1.1.0
+        </button>
+
+        {/* --- QR DONATE BUTTON --- */}
         <a 
             href="#/qr-donate"
             className="fixed bottom-6 right-6 bg-white p-3 rounded-full shadow-lg hover:shadow-xl transform hover:scale-110 transition-all duration-200"
@@ -108,6 +120,9 @@ const LandingPage = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
         </a>
+
+        {/* --- RELEASE NOTES MODAL --- */}
+        {isReleaseNotesOpen && <ReleaseNotesModal onClose={() => setReleaseNotesOpen(false)} />}
     </div>
   );
 };
