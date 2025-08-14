@@ -3,15 +3,15 @@ import XRayMount from './XRayMount';
 import ImageAnalyzer from './ImageAnalyzer';
 import ReportSummary from './ReportSummary';
 import { slotConfigurations } from '../../xray-config';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import Dropdown from '../Dropdown';
 import HistoryPanel from '../HistoryPanel';
 import PatientInfo from '../PatientInfo';
+// Import the new PDF exporter
+import { exportXRayReportAsPdf } from '../../utils/xray-pdf-exporter';
 
 const TOTAL_SLOTS = 18;
 
-// IndexedDB Helpers... (omitted for brevity, no changes here)
+// ... (keep all the IndexedDB helper functions the same)
 const DB_NAME = 'xray-db';
 const DB_VERSION = 1;
 const KV_STORE = 'kv';
@@ -83,6 +83,7 @@ async function idbGetAllHistory() {
   });
 }
 
+
 const freshState = () => ({
   slots: Array.from({ length: TOTAL_SLOTS }, (_, i) => ({ id: i, processedImage: null, reports: [] })),
   summaryFindings: {
@@ -136,6 +137,7 @@ const XRayApp = () => {
   const [activeSlotId, setActiveSlotId] = useState(null);
   const [viewVersion, setViewVersion] = useState(0); 
   const [infoBanner, setInfoBanner] = useState('');
+  const [isExporting, setIsExporting] = useState(false); // State for loading indicator
   const persistTimer = useRef(null);
 
   const { slots, summaryFindings, patientHN, patientName } = appState;
@@ -171,8 +173,6 @@ const XRayApp = () => {
     setActiveSlotId(null);
   };
 
-  // --- MODIFIED CODE ---
-  // This function now correctly finds the specific report by its unique ID and updates it.
   const handleUpdateBoneLossType = (toothNumber, side, type) => {
     const reportId = `${toothNumber}${side}`;
     setAppState(prev => {
@@ -188,8 +188,8 @@ const XRayApp = () => {
         return { ...prev, slots: newSlots };
     });
   };
-  // --- END MODIFIED CODE ---
 
+  // --- (keep handleSaveDraft, handleLoadDraft, handleDeleteDraft, handleClearChart, handleDownload, handleUpload the same) ---
   const handleSaveDraft = async () => {
     const draftTitle = `${patientHN || 'NoHN'} - ${patientName || 'NoName'}`;
     const entry = {
@@ -286,67 +286,17 @@ const XRayApp = () => {
     event.target.value = null; 
   };
 
-  const handleExportPDF = async (hn, name) => {
-    const section1 = document.getElementById('pdf-section-1');
-    const section2 = document.getElementById('pdf-section-2');
-    const section3 = document.getElementById('pdf-section-3');
 
-    if (!section1 || !section2 || !section3) {
-      alert('Could not find all report sections to export.');
-      return;
-    }
-
-    const loadingIndicator = document.createElement('div');
-    loadingIndicator.innerHTML = 'Generating PDF, please wait... (Page 1 of 3)';
-    loadingIndicator.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 20px; background: white; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.2); z-index: 1000;';
-    document.body.appendChild(loadingIndicator);
-
+  // --- UPDATED PDF EXPORT HANDLER ---
+  const handleExportPDF = async () => {
+    setIsExporting(true);
     try {
-      const pdf = new jsPDF('l', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const margin = 15;
-      const contentWidth = pdfWidth - margin * 2;
-      const canvasOptions = { scale: 2 };
-
-      const addHeader = (pdfInstance, pageNum, totalPages) => {
-        pdfInstance.setFontSize(10);
-        pdfInstance.text(`Patient HN: ${hn || 'N/A'}`, margin, margin);
-        pdfInstance.text(`Patient Name: ${name || 'N/A'}`, margin, margin + 7);
-        pdfInstance.text(`Page ${pageNum} of ${totalPages}`, pdfWidth - margin, margin, { align: 'right' });
-      };
-
-      addHeader(pdf, 1, 3);
-      const canvas1 = await html2canvas(section1, canvasOptions);
-      const img1Data = canvas1.toDataURL('image/png');
-      const img1Props = pdf.getImageProperties(img1Data);
-      const pdf1Height = (img1Props.height * contentWidth) / img1Props.width;
-      pdf.addImage(img1Data, 'PNG', margin, margin + 14, contentWidth, pdf1Height);
-
-      loadingIndicator.innerHTML = 'Generating PDF, please wait... (Page 2 of 3)';
-      pdf.addPage();
-      addHeader(pdf, 2, 3);
-      const canvas2 = await html2canvas(section2, canvasOptions);
-      const img2Data = canvas2.toDataURL('image/png');
-      const img2Props = pdf.getImageProperties(img2Data);
-      const pdf2Height = (img2Props.height * contentWidth) / img2Props.width;
-      pdf.addImage(img2Data, 'PNG', margin, margin + 14, contentWidth, pdf2Height);
-
-      loadingIndicator.innerHTML = 'Generating PDF, please wait... (Page 3 of 3)';
-      pdf.addPage();
-      addHeader(pdf, 3, 3);
-      const canvas3 = await html2canvas(section3, canvasOptions);
-      const img3Data = canvas3.toDataURL('image/png');
-      const img3Props = pdf.getImageProperties(img3Data);
-      const pdf3Height = (img3Props.height * contentWidth) / img3Props.width;
-      pdf.addImage(img3Data, 'PNG', margin, margin + 14, contentWidth, pdf3Height);
-
-      const fileName = `${hn || 'NoHN'}-${name || 'NoName'}-XRay-Report.pdf`;
-      pdf.save(fileName);
+      await exportXRayReportAsPdf(appState);
     } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('An error occurred while generating the PDF.');
+      console.error("PDF Export failed:", error);
+      alert("An error occurred while generating the PDF. See the console for details.");
     } finally {
-      document.body.removeChild(loadingIndicator);
+      setIsExporting(false);
     }
   };
 
@@ -354,6 +304,14 @@ const XRayApp = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 flex flex-col items-center p-4">
+      {isExporting && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-lg shadow-xl text-center">
+            <p className="font-semibold text-lg">Generating PDF Report...</p>
+            <p className="text-sm text-gray-600">This may take a moment.</p>
+          </div>
+        </div>
+      )}
       <div className="w-full max-w-7xl">
         {infoBanner && (
           <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">
@@ -376,7 +334,9 @@ const XRayApp = () => {
                 <input type="file" accept=".json" className="hidden" onChange={handleUpload} />
               </label>
               <div className="my-1 border-t border-gray-200" />
-              <button onClick={() => handleExportPDF(patientHN, patientName)} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Export as PDF</button>
+              <button onClick={handleExportPDF} disabled={isExporting} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50">
+                {isExporting ? 'Exporting...' : 'Export as PDF'}
+              </button>
               <div className="my-1 border-t border-gray-200" />
               <button onClick={handleClearChart} className="w-full text-left block px-4 py-2 text-sm text-red-600 hover:bg-red-50">Clear Chart</button>
             </Dropdown>

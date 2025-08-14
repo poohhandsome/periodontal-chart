@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ProcessingStep, PrognosisLevel } from '../../xray-types';
-import { UploadIcon, CameraIcon, CloseIcon } from './Icons';
+import { UploadIcon, CameraIcon, CloseIcon, RedoIcon } from './Icons';
 import { slotConfigurations } from '../../xray-config';
 
 // --- MODIFIED ---: Updated labels for the new 5-point system
@@ -211,6 +211,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     draggingPointIndex.current = null;
   };
 
+  // THIS FUNCTION IS NOW SIMPLIFIED
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -237,6 +238,22 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     }
   };
   
+  // NEW FUNCTION TO HANDLE RESETTING THE STATE
+  const handleStartOver = () => {
+    setStep(ProcessingStep.UPLOAD);
+    setOriginalImage(null);
+    setProcessedImage(null);
+    setCompletedReports([]);
+    setActiveTooth(null);
+    setToothAxisPoints([]);
+    setAnnotationPoints([]);
+    setAnnotationSubStep('SELECT');
+    // Reset file input value to allow re-uploading the same file
+    if(fileInputRef.current) {
+        fileInputRef.current.value = "";
+    }
+  };
+
   const processKeystone = () => {
     if (!originalImage) return;
     const canvas = canvasRef.current;
@@ -262,7 +279,6 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     setStep(ProcessingStep.ANNOTATE);
   };
   
-  // --- NEW ---: This is the completely new 5-point analysis function
   const analyzePoints = () => {
     if (toothAxisPoints.length < 2 || !activeTooth) return;
     const [axisStart, axisEnd] = toothAxisPoints;
@@ -270,16 +286,14 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     
     let reportData = {};
     if (analysisType === 'PA') {
-      if (annotationPoints.length < 5) return; // Expect 5 points now
+      if (annotationPoints.length < 5) return;
       const projPoints = annotationPoints.map(p => projectPointOnLine(p, axisStart, axisEnd));
       const [pCrown, pCej, pBone, pApex, pPhysioBone] = projPoints;
 
-      // 1. Crown : Root Ratio
       const clinicalCrownLen = dist(pCrown, pBone);
       const clinicalRootLen = dist(pBone, pApex);
       const crownRootRatio = clinicalRootLen > 0 ? (clinicalCrownLen / clinicalRootLen).toFixed(2) : 'N/A';
 
-      // 2. RBL% for Perio Staging (Tonetti et al., 2018)
       const anatomicalRootLen = dist(pCej, pApex);
       const cejToBoneLen = dist(pCej, pBone);
       const rblPercentForStaging = anatomicalRootLen > 0 ? Math.min(100, Math.round((cejToBoneLen / anatomicalRootLen) * 100)) : 0;
@@ -287,7 +301,6 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
       if (rblPercentForStaging > 33) stage = 'Stage III/IV';
       else if (rblPercentForStaging >= 15) stage = 'Stage II';
 
-      // 3. Adjusted RBL% for Severity
       const adjustedRootLen = dist(pPhysioBone, pApex);
       const adjustedBoneLossLen = dist(pPhysioBone, pBone);
       const adjustedRblPercent = adjustedRootLen > 0 ? Math.min(100, Math.round((adjustedBoneLossLen / adjustedRootLen) * 100)) : 0;
@@ -295,7 +308,6 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
       if (adjustedRblPercent > 50) severity = 'Severe';
       else if (adjustedRblPercent >= 25) severity = 'Moderate';
       
-      // 4. Attachment Loss in mm
       const attachmentLossMm = (adjustedBoneLossLen / PIXELS_PER_MM).toFixed(2);
       
       reportData = {
@@ -305,12 +317,10 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
           adjustedRblPercent,
           severity,
           attachmentLossMm,
-          // Keep old prognosis field for color-coding compatibility, can be removed later
           prognosis: severity === 'Mild' ? PrognosisLevel.GOOD : severity === 'Moderate' ? PrognosisLevel.FAIR : PrognosisLevel.POOR,
       };
 
     } else { 
-      // Bitewing analysis remains unchanged
       if (annotationPoints.length < 2) return;
       const [cejPoint, bonePoint] = annotationPoints.map(p => projectPointOnLine(p, axisStart, axisEnd));
       const distanceInPixels = dist(cejPoint, bonePoint);
@@ -366,18 +376,32 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
 
   const renderStepContent = () => {
     switch(step) {
-      case ProcessingStep.UPLOAD: return ( <div className="text-center"> <h3 className="text-xl font-semibold mb-4 text-gray-800">Upload X-Ray</h3> <div className="flex justify-center items-center gap-4"> <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center gap-2 p-6 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors border"> <UploadIcon className="w-12 h-12 text-blue-600" /><span>Upload File</span> </button> <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/png, image/jpeg" className="hidden" /> <p className="font-bold text-gray-500">OR</p> <button onClick={() => alert("Camera capture coming soon!")} className="flex flex-col items-center gap-2 p-6 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors border"> <CameraIcon className="w-12 h-12 text-blue-600" /><span>Use Camera</span> </button> </div> </div> );
+      case ProcessingStep.UPLOAD: return ( 
+        <div className="text-center"> 
+          <h3 className="text-xl font-semibold mb-4 text-gray-800">Upload X-Ray</h3> 
+          <div className="flex justify-center items-center gap-4"> 
+            <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center gap-2 p-6 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors border"> 
+              <UploadIcon className="w-12 h-12 text-blue-600" />
+              <span>Upload File</span> 
+            </button> 
+            <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/png, image/jpeg" className="hidden" /> 
+            <p className="font-bold text-gray-500">OR</p> 
+            <button onClick={() => alert("Camera capture coming soon!")} className="flex flex-col items-center gap-2 p-6 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors border"> 
+              <CameraIcon className="w-12 h-12 text-blue-600" />
+              <span>Use Camera</span> 
+            </button> 
+          </div> 
+        </div> 
+      );
       case ProcessingStep.KEYSTONE: return ( <div> <h3 className="text-lg font-semibold mb-2 text-center text-gray-800">Step 1: Align Film Corners</h3> <p className="text-sm text-center text-gray-600 mb-4">Drag the handles to the corners of the X-ray film. Works with touch.</p> <canvas ref={canvasRef} width={canvasSize.width} height={canvasSize.height} className="bg-gray-900 mx-auto rounded-md cursor-crosshair touch-none" onPointerDown={handleInteractionStart} onPointerMove={handleInteractionMove} onPointerUp={handleInteractionEnd} onPointerCancel={handleInteractionEnd} onPointerLeave={(e) => { setMousePos(null); handleInteractionEnd(e); }} ></canvas> <div className="text-center mt-4"> <button onClick={processKeystone} className="px-6 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-md font-semibold transition-colors">Confirm & Crop</button> </div> </div> );
       case ProcessingStep.ANNOTATE:
         const teethInSlot = slotConfigurations[slotId].teeth;
         let instruction = 'Select a tooth area (M or D) to begin.';
-        // --- MODIFIED ---: Required points updated for PA
         const requiredPoints = usePaAnalysis ? 5 : 2;
         if (activeTooth) {
             const sideText = activeTooth.side === 'M' ? 'Mesial' : 'Distal';
             if(annotationSubStep === 'DRAW_AXIS') { instruction = `Place 2 points to define the long axis for T${activeTooth.number} (${sideText}).`; } 
             else if (annotationSubStep === 'PLACE_POINTS' && annotationPoints.length < requiredPoints) {
-                // --- MODIFIED ---: Logic adjusted for PA vs BW label indexing
                 const labelIndex = usePaAnalysis ? annotationPoints.length : annotationPoints.length + 1;
                 instruction = `Place the ${annotationLabels[labelIndex]} point for T${activeTooth.number} (${sideText}).`;
             } else { instruction = `Analysis for T${activeTooth.number} (${sideText}) complete.` }
@@ -385,9 +409,29 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
         return (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-2">
-              <h3 className="text-lg font-semibold mb-2 text-center text-gray-800">Step 2: Analyze Teeth</h3>
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-lg font-semibold text-center text-gray-800">Step 2: Analyze Teeth</h3>
+                {/* THIS BUTTON NOW CALLS handleStartOver */}
+                <button 
+                  onClick={handleStartOver} 
+                  className="flex items-center gap-2 px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-semibold"
+                >
+                  <RedoIcon className="w-4 h-4" />
+                  Change Image
+                </button>
+              </div>
               <p className="text-center text-blue-600 h-6 mb-2 font-semibold">{instruction}</p>
-              <canvas ref={canvasRef} width={isVertical ? 360 : 480} height={isVertical ? 480 : 360} className="bg-gray-900 mx-auto rounded-md cursor-crosshair touch-none" onPointerDown={handleInteractionStart} onPointerMove={handleInteractionMove} onPointerUp={handleInteractionEnd} onPointerCancel={handleInteractionEnd} onPointerLeave={(e) => { setMousePos(null); handleInteractionEnd(e); }} ></canvas>
+              <canvas 
+                ref={canvasRef} 
+                width={isVertical ? 360 : 480} 
+                height={isVertical ? 480 : 360} 
+                className="bg-gray-900 mx-auto rounded-md cursor-crosshair touch-none" 
+                onPointerDown={handleInteractionStart} 
+                onPointerMove={handleInteractionMove} 
+                onPointerUp={handleInteractionEnd} 
+                onPointerCancel={handleInteractionEnd} 
+                onPointerLeave={(e) => { setMousePos(null); handleInteractionEnd(e); }} 
+              ></canvas>
             </div>
             <div className="md:col-span-1 flex flex-col">
               <div>
@@ -426,8 +470,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
                 <h4 className="font-semibold mb-2 text-gray-800">Analysis for Tooth {activeTooth.number} ({activeTooth.side === 'M' ? 'Mesial' : 'Distal'}):</h4> 
                 {annotationSubStep === 'DRAW_AXIS' && <p className="text-sm text-gray-600">Defining axis... ({toothAxisPoints.length}/2 points)</p>} {annotationSubStep === 'PLACE_POINTS' && ( <> <ul className="space-y-2"> {(usePaAnalysis ? annotationLabels : annotationLabels.slice(1)).map((label, i) => ( <li key={label} className="flex items-center gap-2"><span className="w-4 h-4 rounded-full border border-gray-400" style={{ backgroundColor: pointColors[usePaAnalysis ? i : i+1] }}></span><span className={`${annotationPoints.length > i ? 'line-through text-gray-400' : 'text-gray-700'}`}>{label}</span>{annotationPoints.length === i && <span className="text-blue-600 animate-pulse font-bold">&larr; Current</span>}</li> ))} </ul> <div className="mt-4 flex gap-2"> <button onClick={() => { setAnnotationPoints([]); setToothAxisPoints([]); setAnnotationSubStep('DRAW_AXIS'); }} className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm">Reset</button> {annotationPoints.length === requiredPoints && ( <button onClick={analyzePoints} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold">Analyze T{activeTooth.number}{activeTooth.side}</button> )} </div> </> )} </div> )}
               {completedReports.length > 0 && ( <div className="mt-4 bg-gray-50 p-3 rounded-lg flex-grow border"> <h4 className="font-semibold text-gray-800 mb-2">Completed Analyses:</h4> 
-              {/* --- MODIFIED ---: Updated the display to show the new, richer data */}
-              <div className="space-y-2 text-sm overflow-y-auto max-h-48"> 
+              <div className="space-y-2 text-sm overflow-y-auto max-h-96"> 
                 {completedReports.sort((a,b) => a.toothNumber.localeCompare(b.toothNumber) || a.side.localeCompare(b.side)).map(r => ( 
                     <div key={r.id} className="bg-white p-2 rounded border border-gray-200 shadow-sm">
                         <p className="font-bold text-base text-gray-800">T{r.toothNumber}{r.side}: 
@@ -455,7 +498,8 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     }
   };
 
-  return (
+  
+return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center p-4 z-50">
       <div className="bg-white rounded-xl p-6 w-full max-w-6xl relative max-h-[90vh] overflow-y-auto shadow-2xl">
         <button onClick={onClose} className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 z-10 p-1 rounded-full bg-gray-100 hover:bg-gray-200">
@@ -466,5 +510,4 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     </div>
   );
 };
-
 export default ImageAnalyzer;
