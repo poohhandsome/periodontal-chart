@@ -107,7 +107,7 @@ const LandingPage = () => {
             className="fixed bottom-6 left-6 bg-gray-700 text-white px-4 py-2 rounded-full shadow-lg hover:bg-gray-800 transform hover:scale-105 transition-all duration-200 text-sm font-semibold"
             title="View Release Notes"
         >
-            Version 1.1.0
+            Version 1.1.1b
         </button>
 
         {/* --- QR DONATE BUTTON --- */}

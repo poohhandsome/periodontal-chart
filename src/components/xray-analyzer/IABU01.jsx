@@ -3,12 +3,10 @@ import { ProcessingStep, PrognosisLevel } from '../../xray-types';
 import { UploadIcon, CameraIcon, CloseIcon } from './Icons';
 import { slotConfigurations } from '../../xray-config';
 
-// --- MODIFIED ---: Updated labels for the new 5-point system
-const paAnnotationLabels = ["Crown Tip", "CEJ", "Bone Level", "Root Apex", "Physiologic Bone Level"];
+const paAnnotationLabels = ["Crown Tip", "CEJ", "Bone Level", "Root Apex"];
 const bwAnnotationLabels = ["Tooth Axis Point", "CEJ", "Bone Level"];
 
-// --- MODIFIED ---: Added a 5th color for the new point
-const pointColors = ['#00FFFF', '#FF00FF', '#FFFF00', '#00FF00', '#FFA500']; // Crown, CEJ, Bone, Apex, Physio Bone
+const pointColors = ['#00FFFF', '#FF00FF', '#FFFF00', '#00FF00'];
 
 const projectPointOnLine = (p, a, b) => {
     const atob = { x: b.x - a.x, y: b.y - a.y };
@@ -32,7 +30,9 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
   const [canvasSize, setCanvasSize] = useState({ width: 500, height: 500 });
   
   const [annotationSubStep, setAnnotationSubStep] = useState('SELECT');
-  const [activeTooth, setActiveTooth] = useState(null);
+  // --- MODIFIED STATE ---
+  const [activeTooth, setActiveTooth] = useState(null); // Now an object: { number, side, id }
+  // --- END MODIFIED STATE ---
   const [completedReports, setCompletedReports] = useState([]);
   const [toothAxisPoints, setToothAxisPoints] = useState([]);
   const [annotationPoints, setAnnotationPoints] = useState([]);
@@ -109,7 +109,9 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
         img.onload = () => {
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             completedReports.forEach(r => {
+                // --- MODIFIED LOGIC ---
                 if(r.id !== activeTooth?.id) {
+                // --- END MODIFIED LOGIC ---
                     drawAnalysisLines(ctx, r, '#888888');
                 }
             });
@@ -145,7 +147,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
                         ctx.fillStyle = pointColors[usePaAnalysis ? i : i+1];
                         ctx.fill();
                     });
-                    if (mousePos && annotationSubStep === 'PLACE_POINTS' && annotationPoints.length < (usePaAnalysis ? 5 : 2)) {
+                    if (mousePos && annotationSubStep === 'PLACE_POINTS' && annotationPoints.length < (usePaAnalysis ? 4 : 2)) {
                         const projectedP = projectPointOnLine(mousePos, toothAxisPoints[0], toothAxisPoints[1]);
                         ctx.beginPath();
                         ctx.moveTo(mousePos.x, mousePos.y);
@@ -181,7 +183,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
             const newPoints = [...toothAxisPoints, p];
             setToothAxisPoints(newPoints);
             if (newPoints.length === 2) setAnnotationSubStep('PLACE_POINTS');
-        } else if (annotationSubStep === 'PLACE_POINTS' && annotationPoints.length < (usePaAnalysis ? 5 : 2)) {
+        } else if (annotationSubStep === 'PLACE_POINTS' && annotationPoints.length < (usePaAnalysis ? 4 : 2)) {
             setAnnotationPoints([...annotationPoints, p]);
         }
     }
@@ -262,7 +264,6 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     setStep(ProcessingStep.ANNOTATE);
   };
   
-  // --- NEW ---: This is the completely new 5-point analysis function
   const analyzePoints = () => {
     if (toothAxisPoints.length < 2 || !activeTooth) return;
     const [axisStart, axisEnd] = toothAxisPoints;
@@ -270,47 +271,30 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     
     let reportData = {};
     if (analysisType === 'PA') {
-      if (annotationPoints.length < 5) return; // Expect 5 points now
+      if (annotationPoints.length < 4) return;
       const projPoints = annotationPoints.map(p => projectPointOnLine(p, axisStart, axisEnd));
-      const [pCrown, pCej, pBone, pApex, pPhysioBone] = projPoints;
+      const [pCrown, pCej, pBone, pApex] = projPoints;
 
-      // 1. Crown : Root Ratio
       const clinicalCrownLen = dist(pCrown, pBone);
       const clinicalRootLen = dist(pBone, pApex);
-      const crownRootRatio = clinicalRootLen > 0 ? (clinicalCrownLen / clinicalRootLen).toFixed(2) : 'N/A';
+      if (clinicalRootLen === 0) { alert("Clinical root length (bone to apex) cannot be zero."); return; }
+      const crownRootRatio = (clinicalCrownLen / clinicalRootLen).toFixed(2);
 
-      // 2. RBL% for Perio Staging (Tonetti et al., 2018)
       const anatomicalRootLen = dist(pCej, pApex);
-      const cejToBoneLen = dist(pCej, pBone);
-      const rblPercentForStaging = anatomicalRootLen > 0 ? Math.min(100, Math.round((cejToBoneLen / anatomicalRootLen) * 100)) : 0;
-      let stage = 'Stage I';
-      if (rblPercentForStaging > 33) stage = 'Stage III/IV';
-      else if (rblPercentForStaging >= 15) stage = 'Stage II';
+      if (anatomicalRootLen === 0) { alert("Anatomical root length (CEJ to apex) cannot be zero for prognosis."); return; }
+      const attachmentLossInPixels = dist(pCej, pBone);
+      const attachmentLossPercent = Math.min(100, Math.round((attachmentLossInPixels / anatomicalRootLen) * 100));
+      
+      const attachmentLossMm = (attachmentLossInPixels / PIXELS_PER_MM).toFixed(2);
 
-      // 3. Adjusted RBL% for Severity
-      const adjustedRootLen = dist(pPhysioBone, pApex);
-      const adjustedBoneLossLen = dist(pPhysioBone, pBone);
-      const adjustedRblPercent = adjustedRootLen > 0 ? Math.min(100, Math.round((adjustedBoneLossLen / adjustedRootLen) * 100)) : 0;
-      let severity = 'Mild';
-      if (adjustedRblPercent > 50) severity = 'Severe';
-      else if (adjustedRblPercent >= 25) severity = 'Moderate';
-      
-      // 4. Attachment Loss in mm
-      const attachmentLossMm = (adjustedBoneLossLen / PIXELS_PER_MM).toFixed(2);
-      
-      reportData = {
-          crownRootRatio,
-          rblPercentForStaging,
-          stage,
-          adjustedRblPercent,
-          severity,
-          attachmentLossMm,
-          // Keep old prognosis field for color-coding compatibility, can be removed later
-          prognosis: severity === 'Mild' ? PrognosisLevel.GOOD : severity === 'Moderate' ? PrognosisLevel.FAIR : PrognosisLevel.POOR,
-      };
+      let prognosis;
+      if (attachmentLossPercent < 25) prognosis = PrognosisLevel.GOOD;
+      else if (attachmentLossPercent <= 50) prognosis = PrognosisLevel.FAIR;
+      else if (attachmentLossPercent <= 75) prognosis = PrognosisLevel.POOR;
+      else prognosis = PrognosisLevel.QUESTIONABLE;
+      reportData = { crownRootRatio, attachmentLossPercent, prognosis, attachmentLossMm };
 
     } else { 
-      // Bitewing analysis remains unchanged
       if (annotationPoints.length < 2) return;
       const [cejPoint, bonePoint] = annotationPoints.map(p => projectPointOnLine(p, axisStart, axisEnd));
       const distanceInPixels = dist(cejPoint, bonePoint);
@@ -320,18 +304,20 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
       else if (distanceInMm <= 2) prognosis = 'Early (E)';
       else if (distanceInMm <= 4) prognosis = 'Moderate (M)';
       else prognosis = 'Advanced (A)';
-      reportData = { prognosis, attachmentLossMm: distanceInMm.toFixed(2), crownRootRatio: 'N/A', rblPercentForStaging: -1, };
+      reportData = { prognosis, attachmentLossMm: distanceInMm.toFixed(2), crownRootRatio: 'N/A', attachmentLossPercent: -1, };
     }
 
+    // --- MODIFIED LOGIC ---
     const newReport = { 
         ...reportData, 
-        id: activeTooth.id,
+        id: activeTooth.id, // Use the unique ID
         toothNumber: activeTooth.number,
         side: activeTooth.side,
         axis: [axisStart, axisEnd], 
         annotations: annotationPoints 
     };
     setCompletedReports(prev => [...prev.filter(r => r.id !== activeTooth.id), newReport]);
+    // --- END MODIFIED LOGIC ---
     resetAnnotationState();
   };
 
@@ -348,8 +334,9 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     setAnnotationPoints([]);
   }
   
+  // --- MODIFIED FUNCTION ---
   const selectToothForAnalysis = (toothNumber, side) => {
-    const id = `${toothNumber}${side}`;
+    const id = `${toothNumber}${side}`; // Create a unique ID like "18M"
     const existingReport = completedReports.find(r => r.id === id);
 
     if(existingReport) {
@@ -363,6 +350,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     }
     setActiveTooth({ number: toothNumber, side, id });
   }
+  // --- END MODIFIED FUNCTION ---
 
   const renderStepContent = () => {
     switch(step) {
@@ -371,16 +359,16 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
       case ProcessingStep.ANNOTATE:
         const teethInSlot = slotConfigurations[slotId].teeth;
         let instruction = 'Select a tooth area (M or D) to begin.';
-        // --- MODIFIED ---: Required points updated for PA
-        const requiredPoints = usePaAnalysis ? 5 : 2;
+        const requiredPoints = usePaAnalysis ? 4 : 2;
         if (activeTooth) {
+            // --- MODIFIED LOGIC ---
             const sideText = activeTooth.side === 'M' ? 'Mesial' : 'Distal';
             if(annotationSubStep === 'DRAW_AXIS') { instruction = `Place 2 points to define the long axis for T${activeTooth.number} (${sideText}).`; } 
             else if (annotationSubStep === 'PLACE_POINTS' && annotationPoints.length < requiredPoints) {
-                // --- MODIFIED ---: Logic adjusted for PA vs BW label indexing
                 const labelIndex = usePaAnalysis ? annotationPoints.length : annotationPoints.length + 1;
                 instruction = `Place the ${annotationLabels[labelIndex]} point for T${activeTooth.number} (${sideText}).`;
             } else { instruction = `Analysis for T${activeTooth.number} (${sideText}) complete.` }
+            // --- END MODIFIED LOGIC ---
         }
         return (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -392,6 +380,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
             <div className="md:col-span-1 flex flex-col">
               <div>
                 <h4 className="font-semibold mb-2 text-gray-800">1. Select a tooth area to analyze/edit:</h4>
+                {/* --- MODIFIED UI --- */}
                 <div className="flex flex-wrap gap-2">
                     {teethInSlot.map(tooth => {
                         const reportM = completedReports.find(r => r.id === `${tooth}M`);
@@ -421,33 +410,14 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
                         )
                     })}
                 </div>
+                {/* --- END MODIFIED UI --- */}
               </div>
               {activeTooth && ( <div className="mt-4"> 
+                {/* --- MODIFIED UI --- */}
                 <h4 className="font-semibold mb-2 text-gray-800">Analysis for Tooth {activeTooth.number} ({activeTooth.side === 'M' ? 'Mesial' : 'Distal'}):</h4> 
+                {/* --- END MODIFIED UI --- */}
                 {annotationSubStep === 'DRAW_AXIS' && <p className="text-sm text-gray-600">Defining axis... ({toothAxisPoints.length}/2 points)</p>} {annotationSubStep === 'PLACE_POINTS' && ( <> <ul className="space-y-2"> {(usePaAnalysis ? annotationLabels : annotationLabels.slice(1)).map((label, i) => ( <li key={label} className="flex items-center gap-2"><span className="w-4 h-4 rounded-full border border-gray-400" style={{ backgroundColor: pointColors[usePaAnalysis ? i : i+1] }}></span><span className={`${annotationPoints.length > i ? 'line-through text-gray-400' : 'text-gray-700'}`}>{label}</span>{annotationPoints.length === i && <span className="text-blue-600 animate-pulse font-bold">&larr; Current</span>}</li> ))} </ul> <div className="mt-4 flex gap-2"> <button onClick={() => { setAnnotationPoints([]); setToothAxisPoints([]); setAnnotationSubStep('DRAW_AXIS'); }} className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm">Reset</button> {annotationPoints.length === requiredPoints && ( <button onClick={analyzePoints} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold">Analyze T{activeTooth.number}{activeTooth.side}</button> )} </div> </> )} </div> )}
-              {completedReports.length > 0 && ( <div className="mt-4 bg-gray-50 p-3 rounded-lg flex-grow border"> <h4 className="font-semibold text-gray-800 mb-2">Completed Analyses:</h4> 
-              {/* --- MODIFIED ---: Updated the display to show the new, richer data */}
-              <div className="space-y-2 text-sm overflow-y-auto max-h-48"> 
-                {completedReports.sort((a,b) => a.toothNumber.localeCompare(b.toothNumber) || a.side.localeCompare(b.side)).map(r => ( 
-                    <div key={r.id} className="bg-white p-2 rounded border border-gray-200 shadow-sm">
-                        <p className="font-bold text-base text-gray-800">T{r.toothNumber}{r.side}: 
-                            <span className={`font-bold ml-2 ${ r.stage === 'Stage I' ? 'text-green-600' : r.stage === 'Stage II' ? 'text-yellow-600' : 'text-red-600' }`}>
-                                {r.stage || r.prognosis}
-                            </span>
-                        </p>
-                        {r.rblPercentForStaging !== -1 ? (
-                            <div className="text-xs text-gray-600 mt-1 space-y-0.5">
-                                <p><strong>Loss:</strong> {r.attachmentLossMm}mm ({r.severity})</p>
-                                <p><strong>C:R Ratio:</strong> {r.crownRootRatio}</p>
-                                <p><strong>Staging RBL:</strong> {r.rblPercentForStaging}% | <strong>Adjusted RBL:</strong> {r.adjustedRblPercent}%</p>
-                            </div>
-                        ) : (
-                            <p className="text-xs text-gray-500">Loss: {r.attachmentLossMm}mm</p>
-                        )}
-                    </div> 
-                ))} 
-              </div> 
-              </div> )}
+              {completedReports.length > 0 && ( <div className="mt-4 bg-gray-50 p-3 rounded-lg flex-grow border"> <h4 className="font-semibold text-gray-800 mb-2">Completed Analyses:</h4> <div className="space-y-2 text-sm overflow-y-auto max-h-48"> {completedReports.sort((a,b) => a.toothNumber.localeCompare(b.toothNumber) || a.side.localeCompare(b.side)).map(r => ( <div key={r.id} className="bg-white p-2 rounded border border-gray-200 shadow-sm"> <p className="font-bold text-base text-gray-800">T{r.toothNumber}{r.side}: <span className={`font-bold ${ r.prognosis.startsWith(PrognosisLevel.GOOD) || r.prognosis.startsWith('Normal') ? 'text-green-600' : r.prognosis.startsWith(PrognosisLevel.FAIR) || r.prognosis.startsWith('Early') ? 'text-yellow-600' : r.prognosis.startsWith(PrognosisLevel.POOR) || r.prognosis.startsWith('Moderate') ? 'text-orange-600' : 'text-red-600' }`}>{r.prognosis}</span></p> <p className="text-xs text-gray-500"> {r.attachmentLossPercent !== -1 ? `C:R Ratio: ${r.crownRootRatio} | CAL: ${r.attachmentLossPercent}% | Loss: ${r.attachmentLossMm}mm` : `Loss: ${r.attachmentLossMm}mm`} </p> </div> ))} </div> </div> )}
                <div className="mt-auto pt-4"> <button onClick={handleSave} className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-md font-semibold text-lg">Save All & Close</button> </div>
             </div>
           </div>

@@ -5,6 +5,7 @@ import React from 'react';
 import { CloseIcon } from './xray-analyzer/Icons';
 
 const releaseNotes = [
+    { version: '1.1.1b', date: '2025-08-14',notes: ['XRay Layout Updated']},
     {
         version: '1.1.0',
         date: '2025-08-14',
