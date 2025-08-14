@@ -3,12 +3,9 @@ import { ProcessingStep, PrognosisLevel } from '../../xray-types';
 import { UploadIcon, CameraIcon, CloseIcon, RedoIcon } from './Icons';
 import { slotConfigurations } from '../../xray-config';
 
-// --- MODIFIED ---: Updated labels for the new 5-point system
 const paAnnotationLabels = ["Crown Tip", "CEJ", "Bone Level", "Root Apex", "Physiologic Bone Level"];
 const bwAnnotationLabels = ["Tooth Axis Point", "CEJ", "Bone Level"];
-
-// --- MODIFIED ---: Added a 5th color for the new point
-const pointColors = ['#00FFFF', '#FF00FF', '#FFFF00', '#00FF00', '#FFA500']; // Crown, CEJ, Bone, Apex, Physio Bone
+const pointColors = ['#00FFFF', '#FF00FF', '#FFFF00', '#00FF00', '#FFA500'];
 
 const projectPointOnLine = (p, a, b) => {
     const atob = { x: b.x - a.x, y: b.y - a.y };
@@ -211,7 +208,6 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     draggingPointIndex.current = null;
   };
 
-  // THIS FUNCTION IS NOW SIMPLIFIED
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -238,7 +234,6 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     }
   };
   
-  // NEW FUNCTION TO HANDLE RESETTING THE STATE
   const handleStartOver = () => {
     setStep(ProcessingStep.UPLOAD);
     setOriginalImage(null);
@@ -248,7 +243,6 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     setToothAxisPoints([]);
     setAnnotationPoints([]);
     setAnnotationSubStep('SELECT');
-    // Reset file input value to allow re-uploading the same file
     if(fileInputRef.current) {
         fileInputRef.current.value = "";
     }
@@ -304,9 +298,18 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
       const adjustedRootLen = dist(pPhysioBone, pApex);
       const adjustedBoneLossLen = dist(pPhysioBone, pBone);
       const adjustedRblPercent = adjustedRootLen > 0 ? Math.min(100, Math.round((adjustedBoneLossLen / adjustedRootLen) * 100)) : 0;
-      let severity = 'Mild';
-      if (adjustedRblPercent > 50) severity = 'Severe';
-      else if (adjustedRblPercent >= 25) severity = 'Moderate';
+      
+      // --- REVISED LOGIC based on user feedback ---
+      let prognosis;
+      if (adjustedRblPercent > 75) {
+          prognosis = PrognosisLevel.HOPELESS;
+      } else if (adjustedRblPercent > 50) {
+          prognosis = PrognosisLevel.QUESTIONABLE;
+      } else if (adjustedRblPercent >= 25) {
+          prognosis = PrognosisLevel.FAIR; // Represents the "Fair/Poor" 25-50% range
+      } else {
+          prognosis = PrognosisLevel.GOOD;
+      }
       
       const attachmentLossMm = (adjustedBoneLossLen / PIXELS_PER_MM).toFixed(2);
       
@@ -315,9 +318,9 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
           rblPercentForStaging,
           stage,
           adjustedRblPercent,
-          severity,
+          prognosis,
           attachmentLossMm,
-          prognosis: severity === 'Mild' ? PrognosisLevel.GOOD : severity === 'Moderate' ? PrognosisLevel.FAIR : PrognosisLevel.POOR,
+          severity: 'N/A'
       };
 
     } else { 
@@ -411,7 +414,6 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
             <div className="md:col-span-2">
               <div className="flex justify-between items-center mb-2">
                 <h3 className="text-lg font-semibold text-center text-gray-800">Step 2: Analyze Teeth</h3>
-                {/* THIS BUTTON NOW CALLS handleStartOver */}
                 <button 
                   onClick={handleStartOver} 
                   className="flex items-center gap-2 px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-semibold"
@@ -446,6 +448,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
                             if (report.prognosis.startsWith(PrognosisLevel.GOOD) || report.prognosis.startsWith('Normal')) return 'bg-green-100 text-green-800 hover:bg-green-200';
                             if (report.prognosis.startsWith(PrognosisLevel.FAIR) || report.prognosis.startsWith('Early')) return 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200';
                             if (report.prognosis.startsWith(PrognosisLevel.POOR) || report.prognosis.startsWith('Moderate')) return 'bg-orange-100 text-orange-800 hover:bg-orange-200';
+                            if (report.prognosis.startsWith(PrognosisLevel.HOPELESS)) return 'bg-purple-100 text-purple-800 hover:bg-purple-200';
                             return 'bg-red-100 text-red-800 hover:bg-red-200';
                         };
                         
@@ -474,18 +477,24 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
                 {completedReports.sort((a,b) => a.toothNumber.localeCompare(b.toothNumber) || a.side.localeCompare(b.side)).map(r => ( 
                     <div key={r.id} className="bg-white p-2 rounded border border-gray-200 shadow-sm">
                         <p className="font-bold text-base text-gray-800">T{r.toothNumber}{r.side}: 
-                            <span className={`font-bold ml-2 ${ r.stage === 'Stage I' ? 'text-green-600' : r.stage === 'Stage II' ? 'text-yellow-600' : 'text-red-600' }`}>
-                                {r.stage || r.prognosis}
+                            <span className={`font-bold ml-2 ${ 
+                                r.prognosis === PrognosisLevel.GOOD ? 'text-green-600' : 
+                                r.prognosis === PrognosisLevel.FAIR ? 'text-yellow-600' :
+                                r.prognosis === PrognosisLevel.POOR ? 'text-orange-600' :
+                                r.prognosis === PrognosisLevel.QUESTIONABLE ? 'text-red-600' : 
+                                r.prognosis === PrognosisLevel.HOPELESS ? 'text-purple-600' : ''
+                            }`}>
+                                {r.prognosis}
                             </span>
                         </p>
                         {r.rblPercentForStaging !== -1 ? (
                             <div className="text-xs text-gray-600 mt-1 space-y-0.5">
-                                <p><strong>Loss:</strong> {r.attachmentLossMm}mm ({r.severity})</p>
+                                <p><strong>Loss:</strong> {r.attachmentLossMm}mm | <strong>Prognosis:</strong> {r.prognosis}</p>
                                 <p><strong>C:R Ratio:</strong> {r.crownRootRatio}</p>
-                                <p><strong>Staging RBL:</strong> {r.rblPercentForStaging}% | <strong>Adjusted RBL:</strong> {r.adjustedRblPercent}%</p>
+                                <p><strong>Staging RBL:</strong> {r.rblPercentForStaging}% | <strong>Adj. RBL:</strong> {r.adjustedRblPercent}%</p>
                             </div>
                         ) : (
-                            <p className="text-xs text-gray-500">Loss: {r.attachmentLossMm}mm</p>
+                            <p className="text-xs text-gray-500">Loss: {r.attachmentLossMm}mm | Prognosis: {r.prognosis}</p>
                         )}
                     </div> 
                 ))} 

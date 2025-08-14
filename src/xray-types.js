@@ -3,6 +3,7 @@ export const PrognosisLevel = {
   FAIR: 'Fair',
   POOR: 'Poor',
   QUESTIONABLE: 'Questionable',
+  HOPELESS: 'Hopeless',
   NOT_AVAILABLE: 'N/A',
 };
 

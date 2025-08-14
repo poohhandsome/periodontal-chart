@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
 import BoneLossModal from './BoneLossModal';
 import ToothSelectionModal from './ToothSelectionModal';
+import { PrognosisLevel } from '../../xray-types';
 
-// --- NEW / HEAVILY MODIFIED COMPONENT ---
 const PeriodontalStagingTable = ({ allReports }) => {
     
-    // 1. Data Aggregation: Find the most severe report (M or D) for each tooth number.
     const reportsMap = new Map();
     allReports.forEach(report => {
-        // Only consider PA reports for this table
         if (report.rblPercentForStaging === -1) return;
 
         const existing = reportsMap.get(report.toothNumber);
@@ -17,46 +15,26 @@ const PeriodontalStagingTable = ({ allReports }) => {
         }
     });
 
-    // 2. Helper function for Staging Logic
-    const getStageFromRBL = (rbl) => {
-        if (rbl === null || typeof rbl === 'undefined') return { text: 'N/A', level: 0 };
-        if (rbl > 33) return { text: 'Stage III/IV', level: 3, color: 'bg-red-200 text-red-800' };
-        if (rbl >= 15) return { text: 'Stage II', level: 2, color: 'bg-yellow-200 text-yellow-800' };
-        return { text: 'Stage I', level: 1, color: 'bg-green-200 text-green-800' };
+    const getPrognosisStatus = (prognosis) => {
+        if (!prognosis) return { text: 'N/A', color: 'bg-gray-200'};
+        if (prognosis === PrognosisLevel.HOPELESS) return { text: 'Hopeless', color: 'bg-purple-200 text-purple-800' };
+        if (prognosis === PrognosisLevel.QUESTIONABLE) return { text: 'Questionable', color: 'bg-red-200 text-red-800' };
+        if (prognosis === PrognosisLevel.FAIR) return { text: 'Fair', color: 'bg-yellow-200 text-yellow-800' };
+        return { text: 'Good', color: 'bg-green-200 text-green-800' };
     };
-    
-    const getStageFromMM = (mm) => {
-        if (mm === null || typeof mm === 'undefined') return { text: 'N/A', level: 0 };
-        const loss = parseFloat(mm);
-        if (isNaN(loss) || loss <= 0) return { text: 'N/A', level: 0 };
-        if (loss > 5) return { text: 'Stage III/IV', level: 3, color: 'bg-red-200 text-red-800' };
-        if (loss > 3) return { text: 'Stage II', level: 2, color: 'bg-yellow-200 text-yellow-800' };
-        return { text: 'Stage I', level: 1, color: 'bg-green-200 text-green-800' };
-    };
-
-    const getSeverityStatus = (severity) => {
-        if (!severity) return { text: 'N/A', color: 'bg-gray-200'};
-        if (severity === 'Severe') return { text: 'Severe', color: 'bg-red-200 text-red-800' };
-        if (severity === 'Moderate') return { text: 'Moderate', color: 'bg-yellow-200 text-yellow-800' };
-        return { text: 'Mild', color: 'bg-green-200 text-green-800' };
-    };
-
 
     const range = (start, end) => Array.from({ length: Math.abs(end - start) + 1 }, (_, i) => String(start > end ? start - i : start + i));
 
-    // 3. New Table Structure
     const StagingTable = ({ title, rangeLeft, rangeRight }) => (
         <div className="mb-4">
             <h4 className="font-bold text-gray-700 mb-2">{title}</h4>
             <div className="grid grid-cols-[auto_repeat(17,_minmax(0,_1fr))] gap-px bg-gray-300 border border-gray-300 rounded-lg overflow-hidden text-center">
-                {/* Header Row */}
                 <div className="bg-gray-200 p-2 font-semibold text-sm">Tooth #</div>
                 {rangeLeft.map(t => <div key={t} className="bg-white p-2 font-mono font-bold">{t}</div>)}
                 <div className="bg-gray-200"></div>
                 {rangeRight.map(t => <div key={t} className="bg-white p-2 font-mono font-bold">{t}</div>)}
 
-                {/* Data Rows */}
-                {['Loss (mm)', 'Staging RBL%', 'Adjusted RBL%', 'Severity', 'C:R Ratio', 'Diagnostic'].map(label => (
+                {['Loss (mm)', 'Staging RBL%', 'Adj. RBL%', 'Prognosis', 'C:R Ratio', 'Diagnostic Stage'].map(label => (
                     <React.Fragment key={label}>
                         <div className="bg-gray-200 p-2 font-semibold text-sm">{label}</div>
                         {[...rangeLeft, "spacer", ...rangeRight].map((tooth) => {
@@ -69,19 +47,18 @@ const PeriodontalStagingTable = ({ allReports }) => {
                                 switch (label) {
                                     case 'Loss (mm)': content = report.attachmentLossMm ?? 'N/A'; break;
                                     case 'Staging RBL%': content = `${report.rblPercentForStaging}%` ?? 'N/A'; break;
-                                    case 'Adjusted RBL%': content = `${report.adjustedRblPercent}%` ?? 'N/A'; break;
+                                    case 'Adj. RBL%': content = `${report.adjustedRblPercent}%` ?? 'N/A'; break;
                                     case 'C:R Ratio': content = report.crownRootRatio ?? 'N/A'; break;
-                                    case 'Severity':
-                                        const severityStatus = getSeverityStatus(report.severity);
-                                        content = severityStatus.text;
-                                        color = severityStatus.color;
+                                    case 'Prognosis':
+                                        const prognosisStatus = getPrognosisStatus(report.prognosis);
+                                        content = prognosisStatus.text;
+                                        color = prognosisStatus.color;
                                         break;
-                                    case 'Diagnostic':
-                                        const stageRBL = getStageFromRBL(report.rblPercentForStaging);
-                                        const stageMM = getStageFromMM(report.attachmentLossMm);
-                                        const finalStage = stageRBL.level > stageMM.level ? stageRBL : stageMM;
-                                        content = finalStage.text;
-                                        color = finalStage.color;
+                                    case 'Diagnostic Stage':
+                                        content = report.stage;
+                                        if (report.stage === 'Stage III/IV') color = 'bg-red-200 text-red-800';
+                                        else if (report.stage === 'Stage II') color = 'bg-yellow-200 text-yellow-800';
+                                        else if (report.stage === 'Stage I') color = 'bg-green-200 text-green-800';
                                         break;
                                     default: break;
                                 }
@@ -98,7 +75,7 @@ const PeriodontalStagingTable = ({ allReports }) => {
         <div className="bg-gray-100 p-4 rounded-lg mb-6">
             <h3 className="text-lg font-semibold mb-3">Periodontal Staging Diagnostic</h3>
             <p className="text-sm text-gray-600 mb-4">
-                This table reflects the most severe radiographic findings for each tooth, used to determine the periodontal stage.
+                This table reflects the most severe radiographic findings for each tooth, used to determine the periodontal stage and prognosis.
             </p>
             <StagingTable title="Maxillary Arch (Upper)" rangeLeft={range(18, 11)} rangeRight={range(21, 28)} />
             <StagingTable title="Mandibular Arch (Lower)" rangeLeft={range(48, 41)} rangeRight={range(31, 38)} />
@@ -115,11 +92,11 @@ const ReportSummary = ({ slots, findings, onUpdateFindings, onUpdateBoneLossType
         slot.reports.map(report => ({ ...report, slotId: slot.id, processedImage: slot.processedImage }))
     );
     
-    // This section can now be considered secondary or for quick reference
-    const boneLossLevels = {
-        mild: allReports.filter(r => r.severity === 'Mild'),
-        moderate: allReports.filter(r => r.severity === 'Moderate'),
-        severe: allReports.filter(r => r.severity === 'Severe'),
+    const prognosisLevels = {
+        good: allReports.filter(r => r.prognosis === PrognosisLevel.GOOD),
+        fair: allReports.filter(r => r.prognosis === PrognosisLevel.FAIR),
+        questionable: allReports.filter(r => r.prognosis === PrognosisLevel.QUESTIONABLE),
+        hopeless: allReports.filter(r => r.prognosis === PrognosisLevel.HOPELESS),
     };
 
     const handleToothClick = (toothReport, side) => {
@@ -160,25 +137,27 @@ const ReportSummary = ({ slots, findings, onUpdateFindings, onUpdateBoneLossType
             <h2 className="text-2xl font-bold text-center mb-6 text-blue-800">Radiographic Findings Summary</h2>
 
             <div id="pdf-section-2">
-                {/* --- THIS IS THE NEW DIAGNOSTIC TABLE --- */}
                 <PeriodontalStagingTable allReports={allReports} />
 
-                {/* --- THIS IS THE OLD COMPONENT, KEPT AS REQUESTED --- */}
                 <div className="bg-gray-100 p-4 rounded-lg mb-6">
-                    <h3 className="text-lg font-semibold mb-2">1. Analyzed Sites by Severity</h3>
-                    <p className="text-sm text-gray-500 mb-4">This section groups all individual mesial/distal analyses by severity. Click a site to specify Horizontal/Vertical bone loss.</p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <h3 className="text-lg font-semibold mb-2">1. Analyzed Sites by Prognosis</h3>
+                    <p className="text-sm text-gray-500 mb-4">This section groups all individual mesial/distal analyses by prognosis. Click a site to specify Horizontal/Vertical bone loss.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
-                            <h4 className="font-bold">Mild</h4>
-                            <div className="flex flex-wrap">{boneLossLevels.mild.map(renderTooth)}</div>
+                            <h4 className="font-bold">Good</h4>
+                            <div className="flex flex-wrap">{prognosisLevels.good.map(renderTooth)}</div>
                         </div>
                         <div>
-                            <h4 className="font-bold">Moderate</h4>
-                            <div className="flex flex-wrap">{boneLossLevels.moderate.map(renderTooth)}</div>
+                            <h4 className="font-bold">Fair</h4>
+                            <div className="flex flex-wrap">{prognosisLevels.fair.map(renderTooth)}</div>
                         </div>
                         <div>
-                            <h4 className="font-bold">Severe</h4>
-                            <div className="flex flex-wrap">{boneLossLevels.severe.map(renderTooth)}</div>
+                            <h4 className="font-bold">Questionable</h4>
+                            <div className="flex flex-wrap">{prognosisLevels.questionable.map(renderTooth)}</div>
+                        </div>
+                        <div>
+                            <h4 className="font-bold">Hopeless</h4>
+                            <div className="flex flex-wrap">{prognosisLevels.hopeless.map(renderTooth)}</div>
                         </div>
                     </div>
                 </div>

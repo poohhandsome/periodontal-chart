@@ -1,10 +1,8 @@
 import { slotConfigurations } from '../xray-config';
-// The font files are still needed for embedding
 import { RobotoRegular } from './fonts/Roboto-Regular';
 import { RobotoBold } from './fonts/Roboto-Bold';
 import { RobotoSlabRegular } from './fonts/RobotoSlab-Regular';
 
-// This function ensures the jsPDF libraries are loaded before we try to use them.
 const loadScripts = () => {
     return new Promise((resolve, reject) => {
         if (window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.autoTable) {
@@ -31,9 +29,9 @@ const loadScripts = () => {
 
 // --- Configuration ---
 const PDF_EXPORT_ORDER = [
-    0, 1, 6, 7, 8, 12, 13, // Maxillary PA
-    4, 5, 9, 10, 11, 16, 17, // Mandibular PA
-    2, 3, 14, 15, // Bitewings
+    0, 1, 6, 7, 8, 12, 13,
+    4, 5, 9, 10, 11, 16, 17,
+    2, 3, 14, 15,
 ];
 
 const pointColors = {
@@ -44,20 +42,14 @@ const pointColors = {
     '#FFA500': 'Physiologic Bone'
 };
 
-const severityConfig = {
-    'Mild': { color: [220, 252, 231] },
-    'Moderate': { color: [254, 243, 199] },
-    'Severe': { color: [254, 226, 226] },
-    // Bitewing Fallbacks
-    'Normal (N)': { color: [220, 252, 231] },
-    'Early (E)': { color: [254, 243, 199] },
-    'Moderate (M)': { color: [254, 226, 226] },
-    'Advanced (A)': { color: [254, 202, 202] },
+const prognosisConfig = {
+    'Good': { color: [220, 252, 231], range: '<25%' },
+    'Fair': { color: [254, 243, 199], range: '25-50%' },
+    'Questionable': { color: [254, 226, 226], range: '51-75%' },
+    'Hopeless': { color: [233, 213, 255], range: '>75%' },
 };
 
-
 // --- Helper Functions ---
-
 const createAnnotatedImage = (base64Image, reports) => {
     return new Promise((resolve) => {
         const img = new Image();
@@ -106,7 +98,15 @@ const addHeader = (doc, patientInfo) => {
     doc.line(15, 45, 195, 45);
 };
 
-// MODIFIED: Removed the Severity Legend
+const addFootnotes = (doc) => {
+    const pageHeight = doc.internal.pageSize.getHeight();
+    doc.setFont('Roboto-Regular');
+    doc.setFontSize(8);
+    doc.setTextColor(100);
+    doc.text("¹ RBL% (Staging) = (CEJ to Alveolar Crest) / (CEJ to Apex) × 100.", 15, pageHeight - 15);
+    doc.text("² Adj. RBL% (Prognosis) = (Physiologic Bone Level to Alveolar Crest) / (Physiologic Bone Level to Apex) × 100.", 15, pageHeight - 10);
+};
+
 const addLegends = (doc, startY) => {
     doc.setFont('Roboto-Bold');
     doc.setFontSize(10);
@@ -121,15 +121,20 @@ const addLegends = (doc, startY) => {
         doc.text(label, xOffset + 5, startY + 5.5);
         xOffset += 35;
     });
-};
+    
+    doc.setFont('Roboto-Bold');
+    doc.setFontSize(10);
+    doc.text('Prognosis Legend (Adj. RBL%²)', 15, startY + 12);
 
-const addFootnotes = (doc) => {
-    const pageHeight = doc.internal.pageSize.getHeight();
-    doc.setFont('Roboto-Regular');
-    doc.setFontSize(8);
-    doc.setTextColor(100);
-    doc.text("¹ RBL% (Staging) = (CEJ to Alveolar Crest) / (CEJ to Apex) × 100.", 15, pageHeight - 15);
-    doc.text("² Adj. RBL% (Severity) = (Physiologic Bone Level to Alveolar Crest) / (Physiologic Bone Level to Apex) × 100.", 15, pageHeight - 10);
+    xOffset = 15;
+    Object.entries(prognosisConfig).forEach(([level, { color, range }]) => {
+        doc.setFillColor(color[0], color[1], color[2]);
+        doc.rect(xOffset, startY + 15, 3, 3, 'F');
+        doc.setFont('Roboto-Regular');
+        doc.setFontSize(9);
+        doc.text(`${level} (${range})`, xOffset + 5, startY + 17.5);
+        xOffset += 40;
+    });
 };
 
 const addSlotPage = async (doc, slotData) => {
@@ -156,10 +161,7 @@ const addSlotPage = async (doc, slotData) => {
     const legendsY = imgStartY + imgHeight + 8;
     addLegends(doc, legendsY);
 
-    // MODIFIED: Reordered table headers
-    const tableHeaders = [['Site', 'Loss (mm)', 'C:R Ratio', 'RBL%¹', 'Stage', 'Adj. RBL%²', 'Severity']];
-    
-    // MODIFIED: Reordered table body data to match new headers
+    const tableHeaders = [['Site', 'Loss (mm)', 'C:R Ratio', 'RBL%¹', 'Stage', 'Adj. RBL%²', 'Prognosis']];
     const tableBody = slot.reports
       .sort((a, b) => parseInt(a.toothNumber) - parseInt(b.toothNumber) || a.side.localeCompare(b.side))
       .map(r => [
@@ -167,39 +169,22 @@ const addSlotPage = async (doc, slotData) => {
         r.attachmentLossMm,
         r.crownRootRatio,
         r.rblPercentForStaging !== -1 ? `${r.rblPercentForStaging}%` : 'N/A',
-        r.stage || r.prognosis,
+        r.stage || 'N/A',
         r.adjustedRblPercent !== undefined ? `${r.adjustedRblPercent}%` : 'N/A',
-        r.severity || 'N/A',
+        r.prognosis,
       ]);
 
     doc.autoTable({
         head: tableHeaders,
         body: tableBody,
-        startY: legendsY + 12,
+        startY: legendsY + 24,
         theme: 'grid',
         styles: { font: 'Roboto-Regular', fontSize: 9 },
         headStyles: { font: 'Roboto-Bold', fillColor: [22, 78, 99], textColor: 255 },
         didParseCell: (data) => {
-            // This logic now checks both the Stage and Severity columns for color coding
-            const stage = data.row.raw[4]; // New position for Stage
-            const severity = data.row.raw[6]; // New position for Severity
-            let colorKey = null;
-
-            if (stage && (stage.includes('III') || stage.includes('Advanced'))) {
-                colorKey = 'Severe';
-            } else if (stage && (stage.includes('II') || stage.includes('Moderate'))) {
-                colorKey = 'Moderate';
-            } else if (stage && (stage.includes('I') || stage.includes('Early'))) {
-                colorKey = 'Mild';
-            }
-            
-            // Allow severity column to also have color
-            if (severityConfig[severity]) {
-                colorKey = severity;
-            }
-
-            if (colorKey && severityConfig[colorKey]) {
-                data.cell.styles.fillColor = severityConfig[colorKey].color;
+            const prognosis = data.row.raw[6]; 
+            if (data.column.index === 6 && prognosisConfig[prognosis]) {
+                data.cell.styles.fillColor = prognosisConfig[prognosis].color;
             }
         },
     });
