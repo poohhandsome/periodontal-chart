@@ -59,3 +59,19 @@ export const CloseIcon = ({ className }) => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
   </svg>
 );
+export const MagicWandIcon = ({ className }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    className={className || 'h-6 w-6'}
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={2}
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M12 21.6c-1.2-2.4-3.6-6-3.6-6s-3.6-2.4-6-3.6c2.4-1.2 6-3.6 6-3.6s2.4-3.6 3.6-6c1.2 2.4 3.6 6 3.6 6s3.6 2.4 6 3.6c-2.4 1.2-6 3.6-6 3.6s-2.4 3.6-3.6 6zM4.8 4.8l1.2 2.4m12 12l1.2 2.4M4.8 19.2l1.2-2.4m12-12l1.2-2.4"
+    />
+  </svg>
+);

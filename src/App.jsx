@@ -6,6 +6,7 @@ import PlaqueIndexPage from './pages/PlaqueIndexPage';
 import VoicePeriodontalChartPage from './pages/VoicePeriodontalChartPage';
 import QRCodePage from './pages/QRCodePage'; // Import the new page
 import XRayAnalysisPage from './pages/XRayAnalysisPage';
+import XRayAnalysisONNXPage from './pages/XRayAnalysisONNXPage'; 
 const App = () => {
     const [route, setRoute] = useState(window.location.hash);
 
@@ -28,6 +29,8 @@ const App = () => {
             case '#/qr-donate': // Add the new route
                 return <QRCodePage />;
             case '#/xray-analysis': return <XRayAnalysisPage />;
+            case '#/xray-analysis-onnx': // <-- 2. Add the new route
+                return <XRayAnalysisONNXPage />;
             default:
                 return <LandingPage />;
         }
