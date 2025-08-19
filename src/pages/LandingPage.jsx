@@ -80,19 +80,14 @@ const LandingPage = () => {
                         />
                     </div>
                     <ToolCard 
-                        title="2D X-Ray Analysis"
+                        title="X-Ray Analysis"
                         description="Upload radiographs for manual analysis."
                         href="#/xray-analysis"
                         icon={<XRayIcon />}
                         isBeta={true} 
                     />
                     
-                        <ToolCard 
-                            title="AI X-Ray Analysis" 
-                            description="(under construction)"
-                            href="#/xray-analysis-onnx"
-                            icon={<XRayIcon />}
-                        />
+                        
                     
                 </div>
 
@@ -116,7 +111,7 @@ const LandingPage = () => {
             className="fixed bottom-6 left-6 bg-gray-700 text-white px-4 py-2 rounded-full shadow-lg hover:bg-gray-800 transform hover:scale-105 transition-all duration-200 text-sm font-semibold"
             title="View Release Notes"
         >
-            Version 1.1.2
+            Version 1.1.3
         </button>
 
         {/* --- QR DONATE BUTTON --- */}

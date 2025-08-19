@@ -4,65 +4,44 @@ import * as ort from 'onnxruntime-web';
 import { ProcessingStep, PrognosisLevel } from '../../xray-types';
 import { UploadIcon, CloseIcon, RedoIcon, MagicWandIcon } from './Icons';
 import { slotConfigurations } from '../../xray-config';
+import AIPreAnalyzeModal from './AIPreAnalyzeModal';
 
 // ---------- ORT & Models ----------
 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
 ort.env.logLevel = 'warning';
 const KP8_MODEL = '/best.onnx';        // 8-keypoint model
 const KP2_MODEL = '/tooth-axis.onnx';  // 2-keypoint axis model
+// --- 8-KP index map (your training order)
 
 // ---------- Constants ----------
 const paAnnotationLabels = ['Crown Tip', 'CEJ', 'Bone Level', 'Root Apex', 'Physiologic Bone Level'];
 const bwAnnotationLabels = ['Tooth Axis Point', 'CEJ', 'Bone Level'];
 const pointColors = ['#00FFFF', '#FF00FF', '#FFFF00', '#00FF00', '#FFA500'];
 const PIXELS_PER_MM = 12;
-
-// ---------- Geometry helpers ----------
-const projectPointOnLine = (p, a, b) => {
-  const atob = { x: b.x - a.x, y: b.y - a.y };
-  const atop = { x: p.x - a.x, y: p.y - a.y };
-  const len = atob.x * atob.x + atob.y * atob.y;
-  if (len === 0) return a;
-  const dot = atop.x * atob.x + atop.y * atob.y;
-  const t = Math.max(0, Math.min(1, dot / len));
-  return { x: a.x + atob.x * t, y: a.y + atob.y * t };
+const KP8_IDX = {
+  crownM: 0,  // tipM
+  cejM:   1,
+  boneM:  2,
+  apexM:  3,
+  cejD:   4,
+  boneD:  5,
+  apexD:  6,
+  crownD: 7,  // tipD
 };
-// Unit vector with length
-const unitVec = (p, q) => {
-  const vx = q.x - p.x, vy = q.y - p.y;
-  const L = Math.hypot(vx, vy) || 1e-6;
-  return { x: vx / L, y: vy / L, L };
-};
-
-// Mirror a point across a line AB (used to synthesize the missing side)
-const reflectAcrossAxis = (p, a, b) => {
-  const pr = projectPointOnLine(p, a, b);
-  return { x: 2 * pr.x - p.x, y: 2 * pr.y - p.y };
-};
-
-const nonMaxSuppression = (boxes, scores, iouThreshold) => {
-  const order = scores.map((_, i) => i).sort((a, b) => scores[b] - scores[a]);
-  const keep = [];
-  const suppressed = Array(scores.length).fill(false);
-  for (const i of order) {
-    if (suppressed[i]) continue;
-    keep.push(i);
-    for (const j of order) {
-      if (i === j || suppressed[j]) continue;
-      const [x1, y1, x2, y2] = boxes[i];
-      const [X1, Y1, X2, Y2] = boxes[j];
-      const ix1 = Math.max(x1, X1), iy1 = Math.max(y1, Y1);
-      const ix2 = Math.min(x2, X2), iy2 = Math.min(y2, Y2);
-      const inter = Math.max(0, ix2 - ix1) * Math.max(0, iy2 - iy1);
-      const a1 = (x2 - x1) * (y2 - y1), a2 = (X2 - X1) * (Y2 - Y1);
-      const iou = inter / (a1 + a2 - inter);
-      if (iou > iouThreshold) suppressed[j] = true;
-    }
-  }
-  return keep;
+// ---------- Letterbox helpers ----------
+const makeLetterboxToCanvas = (iw, ih, cw, ch) => {
+  const ratio = Math.min(cw / iw, ch / ih);
+  const newW = iw * ratio;
+  const newH = ih * ratio;
+  const ox = (cw - newW) / 2;
+  const oy = (ch - newH) / 2;
+  return {
+    ratio, ox, oy, newW, newH, // These are needed by the new draw function
+    toCanvas: (p) => ({ x: ox + p.x * ratio, y: oy + p.y * ratio })
+  };
 };
 
-// Build tensor with letterbox; map back to *image* pixels
+// Build 1×3×640×640 tensor (letterboxed) and return mapping back to original image pixels
 const buildNCHW3x640Float = (img) => {
   const W = 640, H = 640;
   const iw = img.naturalWidth || img.width;
@@ -90,101 +69,122 @@ const buildNCHW3x640Float = (img) => {
   }
   return { tensor: new ort.Tensor('float32', arr, [1, 3, H, W]), letterbox: { ratio, ox, oy, iw, ih } };
 };
+function logMapping(where, imgW, imgH, cw, ch, ratio, ox, oy, det) {
+  console.log(`--- ${where} ---`, {
+    imageDimensions: { width: imgW, height: imgH },
+    canvasDimensions: { width: cw, height: ch },
+    letterbox: { ratio, ox, oy },
+    firstDetection: det && {
+      id: det.id,
+      axis: det.axis,
+      aiPoints: det.aiPoints,
+      status: det.status,
+    },
+  });
+}
 
-// Parse YOLO pose-style outputs robustly (v8/v11, pixels/normalized, xyxy/cxcywh).
-// Returns boxes & keypoints in ORIGINAL IMAGE PIXELS (not 640), ready for toCanvasMapper(...).
-const extractDetections = (results, session, numKeypoints, letterbox, opts = {}) => {
-  const confTh = opts.confTh ?? 0.30;
-  const iouTh  = opts.iouTh  ?? 0.45;
+// Optional: draw a small cross to visually confirm a mapped point
+function debugCross(ctx, p, size = 6) {
+  if (!p) return;
+  ctx.save();
+  ctx.strokeStyle = 'magenta';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(p.x - size, p.y); ctx.lineTo(p.x + size, p.y);
+  ctx.moveTo(p.x, p.y - size); ctx.lineTo(p.x, p.y + size);
+  ctx.stroke();
+  ctx.restore();
+}
+// ---------- Geometry helpers ----------
+const projectPointOnLine = (p, a, b) => {
+  const atob = { x: b.x - a.x, y: b.y - a.y };
+  const atop = { x: p.x - a.x, y: p.y - a.y };
+  const len = atob.x * atob.x + atob.y * atob.y;
+  if (len === 0) return a;
+  const dot = atop.x * atob.x + atop.y * atob.y;
+  const t = Math.max(0, Math.min(1, dot / len));
+  return { x: a.x + atob.x * t, y: a.y + atob.y * t };
+};
 
+const nonMaxSuppression = (boxes, scores, iouThreshold) => {
+  const order = scores.map((_, i) => i).sort((a, b) => scores[b] - scores[a]);
+  const keep = [];
+  const suppressed = Array(scores.length).fill(false);
+  for (const i of order) {
+    if (suppressed[i]) continue;
+    keep.push(i);
+    for (const j of order) {
+      if (i === j || suppressed[j]) continue;
+      const [x1, y1, x2, y2] = boxes[i];
+      const [X1, Y1, X2, Y2] = boxes[j];
+      const ix1 = Math.max(x1, X1), iy1 = Math.max(y1, Y1);
+      const ix2 = Math.min(x2, X2), iy2 = Math.min(y2, Y2);
+      const inter = Math.max(0, ix2 - ix1) * Math.max(0, iy2 - iy1);
+      const a1 = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+      const a2 = Math.max(0, X2 - X1) * Math.max(0, Y2 - Y1);
+      const denom = a1 + a2 - inter;
+      const iou = denom <= 0 ? 0 : inter / denom;
+      if (iou > iouThreshold) suppressed[j] = true;
+    }
+  }
+  return keep;
+};
+
+// ---------- CRITICAL: EXACTLY match ONNX page parsing ----------
+// We assume YOLOv8/YOLOv11 pose export with layout [1, P, N] and XYWH.
+// P = 4 (box) + 1 (conf) + 3*K (keypoints). N is large (~8400).
+const extractDetections = (results, session, numKeypoints, letterbox) => {
   const outName = session.outputNames?.[0];
   const t = outName ? results[outName] : null;
-  if (!t || t.dims.length !== 3 || t.dims[0] !== 1) {
-    console.error("Invalid ONNX output tensor shape:", t?.dims);
-    return [];
-  }
+  if (!t || t.dims.length !== 3) return [];
 
-  const data = t.data;
-  const [_, d1, d2] = t.dims;
+  const P = t.dims[1];
+  const N = t.dims[2];
 
-  // Figure out layout: [1, nCand, props] vs [1, props, nCand]
-  let nCand, props, get;
-  if (d2 >= d1) {
-    // [1, props, nCand]
-    props = d1; nCand = d2;
-    get = (i, k) => data[k * nCand + i];
-  } else {
-    // [1, nCand, props]
-    nCand = d1; props = d2;
-    get = (i, k) => data[i * props + k];
-  }
+  // Accessor for [1, P, N]
+  const get = (k, i) => t.data[k * N + i];
 
-  // Quick sanity for pose: 4(box)+1(conf)+3*numKeypoints
-  if (props < 5 + 3 * numKeypoints) {
-    console.warn("Props too small for keypoints:", { props, numKeypoints });
-  }
-
-  const S = 640; // buildNCHW3x640Float uses 640x640
   const { ratio, ox, oy } = letterbox;
-
-  // Helpers
-  const denorm = (v, normalized) => normalized ? (v * S) : v;
   const unmap = (x, y) => ({ x: (x - ox) / ratio, y: (y - oy) / ratio });
 
-  // Auto-detect: normalized coords? xyxy or cxcywh?
-  let normVotes = 0, pixVotes = 0, xyxyVotes = 0, cxcywhVotes = 0, samples = 0;
-  for (let i = 0; i < nCand && samples < 60; i++) {
-    const sc = get(i, 4);
-    if (sc < confTh) continue;
-    const a = get(i, 0), b = get(i, 1), c = get(i, 2), d = get(i, 3);
-    if (a >= 0 && a <= 1 && b >= 0 && b <= 1 && c >= 0 && c <= 1 && d >= 0 && d <= 1) normVotes++; else pixVotes++;
-    const w_xyxy  = c - a, h_xyxy  = d - b;
-    if (w_xyxy > 0 && h_xyxy > 0) xyxyVotes++; else cxcywhVotes++; // rough vote
-    samples++;
-  }
-  const isNormalized = normVotes > pixVotes;
-  const isXYXY = xyxyVotes >= cxcywhVotes;
+  const confTh = 0.45;   // tighter than 0.30 to curb noisy anchors
+  const iouTh  = 0.50;
 
   const boxes = [];
   const scores = [];
   const kps = [];
 
-  for (let i = 0; i < nCand; i++) {
-    const score = get(i, 4);
-    if (score < confTh) continue;
+  for (let i = 0; i < N; i++) {
+    const score = get(4, i);
+    if (!(score >= confTh)) continue;
 
-    let x1p, y1p, x2p, y2p;
-    if (isXYXY) {
-      const x1 = denorm(get(i, 0), isNormalized);
-      const y1 = denorm(get(i, 1), isNormalized);
-      const x2 = denorm(get(i, 2), isNormalized);
-      const y2 = denorm(get(i, 3), isNormalized);
-      const p1 = unmap(x1, y1);
-      const p2 = unmap(x2, y2);
-      x1p = p1.x; y1p = p1.y; x2p = p2.x; y2p = p2.y;
-    } else {
-      const cx = denorm(get(i, 0), isNormalized);
-      const cy = denorm(get(i, 1), isNormalized);
-      const w  = denorm(get(i, 2), isNormalized);
-      const h  = denorm(get(i, 3), isNormalized);
-      const p1 = unmap(cx - w / 2, cy - h / 2);
-      const p2 = unmap(cx + w / 2, cy + h / 2);
-      x1p = p1.x; y1p = p1.y; x2p = p2.x; y2p = p2.y;
-    }
+    // XYWH (center-size) -> corners
+    const cx = get(0, i), cy = get(1, i), w = get(2, i), h = get(3, i);
+    const x1 = cx - w / 2, y1 = cy - h / 2, x2 = cx + w / 2, y2 = cy + h / 2;
 
-    // Skip degenerate
-    if (!isFinite(x1p) || !isFinite(y1p) || !isFinite(x2p) || !isFinite(y2p)) continue;
-    if (x2p <= x1p || y2p <= y1p) continue;
+    // Map from 640-letterbox back to original image pixels
+    const p11 = unmap(x1, y1);
+    const p22 = unmap(x2, y2);
 
-    boxes.push([x1p, y1p, x2p, y2p]);
+    // Drop degenerate boxes after unmapping
+    if ((p22.x - p11.x) < 1 || (p22.y - p11.y) < 1) continue;
+
+    boxes.push([p11.x, p11.y, p22.x, p22.y]);
     scores.push(score);
 
     const pts = [];
+    let nonZero = 0;
     for (let j = 0; j < numKeypoints; j++) {
-      const kx = denorm(get(i, 5 + j * 3), isNormalized);
-      const ky = denorm(get(i, 6 + j * 3), isNormalized);
-      const u = unmap(kx, ky);
+      const x = get(5 + j * 3, i);
+      const y = get(6 + j * 3, i);
+      const u = unmap(x, y);
+      if (u.x !== 0 || u.y !== 0) nonZero++;
       pts.push({ x: u.x, y: u.y });
+    }
+    // Require at least a couple of keypoints to be non-zero
+    if (nonZero < Math.min(2, numKeypoints)) {
+      boxes.pop(); scores.pop(); // discard this anchor
+      continue;
     }
     kps.push(pts);
   }
@@ -193,84 +193,59 @@ const extractDetections = (results, session, numKeypoints, letterbox, opts = {})
   return keep.map(idx => ({ box: boxes[idx], points: kps[idx], score: scores[idx] }));
 };
 
-
-// Map image-pixel coordinates → canvas pixels
+// ---------- Map image-pixel coordinates → canvas pixels ----------
 const toCanvasMapper = (img, canvas) => {
   const cw = canvas.width, ch = canvas.height;
   const iw = img.naturalWidth || img.width;
   const ih = img.naturalHeight || img.height;
   return (p) => ({ x: (p.x * cw) / iw, y: (p.y * ch) / ih });
 };
-const parseDetectionsFromONNX = (results, session, numKeypoints, letterbox) => {
-    const outName = session.outputNames?.[0];
-    const tensor = outName ? results[outName] : null;
-    if (!tensor || tensor.dims.length !== 3) return [];
+// ---- Hit-testing helpers for AI detections (canvas space) ----
+const dist2 = (p, q) => {
+  const dx = p.x - q.x, dy = p.y - q.y;
+  return dx*dx + dy*dy;
+};
+const clamp01 = (t) => Math.max(0, Math.min(1, t));
+const distPointToSeg2 = (p, a, b) => {
+  const abx = b.x - a.x, aby = b.y - a.y;
+  const apx = p.x - a.x, apy = p.y - a.y;
+  const denom = abx*abx + aby*aby || 1e-6;
+  const t = clamp01((apx*abx + apy*aby) / denom);
+  const x = a.x + abx*t, y = a.y + aby*t;
+  const dx = p.x - x, dy = p.y - y;
+  return dx*dx + dy*dy;
+};
+const HIT_R2 = 14 * 14; // ~14 px radius
 
-    const { ratio, ox, oy } = letterbox;
-    const scale = 1 / ratio;
-    const xOffset = ox;
-    const yOffset = oy;
-    const confTh = 0.3, iouTh = 0.45;
-
-    // This specific (transposed) data access method is what works for your models
-    const dims = tensor.dims, nCand = dims[2], data = tensor.data;
-    const get = (k, i) => data[k * nCand + i];
-    
-    const boxes = [], scores = [], keypoints = [];
-    for (let i = 0; i < nCand; i++) {
-        const score = get(4, i);
-        if (score < confTh) continue;
-
-        const cx = get(0, i), cy = get(1, i), w = get(2, i), h = get(3, i);
-        // Un-letterbox the bounding box to the original image's coordinate space
-        boxes.push([
-            (cx - w / 2 - xOffset) * scale,
-            (cy - h / 2 - yOffset) * scale,
-            (cx + w / 2 - xOffset) * scale,
-            (cy + h / 2 - yOffset) * scale
-        ]);
-        scores.push(score);
-
-        const pts = [];
-        for (let j = 0; j < numKeypoints; j++) {
-            // Un-letterbox the keypoints to the original image's coordinate space
-            pts.push({
-                x: (get(5 + j * 3, i) - xOffset) * scale,
-                y: (get(6 + j * 3, i) - yOffset) * scale,
-                s: get(7 + j * 3, i) // score/visibility
-            });
-        }
-        keypoints.push(pts);
+// Returns closest detection id under pointer, else null.
+const hitTestDetectionAtPoint = (pt, dets) => {
+  let best = { id: null, d2: Infinity };
+  for (const det of dets) {
+    const { aiPoints, axis } = det;
+    // test 4 landmarks
+    const cand = [aiPoints.crownTip, aiPoints.cej, aiPoints.boneLevel, aiPoints.rootApex];
+    for (const c of cand) {
+      const d2 = dist2(pt, c);
+      if (d2 < best.d2) best = { id: det.id, d2 };
     }
-    
-    const keep = nonMaxSuppression(boxes, scores, iouTh);
-    return keep.map(idx => ({ box: boxes[idx], points: keypoints[idx], score: scores[idx] }));
+    // test axis segment
+    const d2seg = distPointToSeg2(pt, axis[0], axis[1]);
+    if (d2seg < best.d2) best = { id: det.id, d2: d2seg };
+  }
+  return best.d2 <= HIT_R2 ? best.id : null;
 };
-
-// Scalar projection of point P onto axis A->B (0 at A, 1 at B if P is at B)
-const projScalar = (P, A, B) => {
-  const abx = B.x - A.x, aby = B.y - A.y;
-  const apx = P.x - A.x, apy = P.y - A.y;
-  const denom = (abx*abx + aby*aby) || 1e-6;
-  return (apx*abx + apy*aby) / denom;
-};
-
-// Point on axis A->B at scalar t
-const pointAtT = (A, B, t) => ({
-  x: A.x + t * (B.x - A.x),
-  y: A.y + t * (B.y - A.y),
-});
-// --- IoU + greedy pairing (axis ↔ kp8) ---
+// ---------- Pairing helpers ----------
 const iou = (a, b) => {
   const [x1,y1,x2,y2] = a, [X1,Y1,X2,Y2] = b;
   const ix1 = Math.max(x1, X1), iy1 = Math.max(y1, Y1);
   const ix2 = Math.min(x2, X2), iy2 = Math.min(y2, Y2);
   const inter = Math.max(0, ix2 - ix1) * Math.max(0, iy2 - iy1);
-  const a1 = (x2 - x1) * (y2 - y1), a2 = (X2 - X1) * (Y2 - Y1);
+  const a1 = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+  const a2 = Math.max(0, X2 - X1) * Math.max(0, Y2 - Y1);
   const denom = a1 + a2 - inter;
   return denom <= 0 ? 0 : inter / denom;
 };
-// Pair axis and kp8 by IoU of boxes (robust)
+
 const pairDetectionsByIoU = (axisDets, kp8Dets) => {
   if (!axisDets.length || !kp8Dets.length) return [];
   const cands = [];
@@ -283,29 +258,84 @@ const pairDetectionsByIoU = (axisDets, kp8Dets) => {
   const usedA = new Set(), usedK = new Set(), pairs = [];
   for (const c of cands) {
     if (usedA.has(c.ai) || usedK.has(c.ki)) continue;
-    // accept any IoU > 0, fall back later if none matched
-    if (c.iou >= 0) {
-      usedA.add(c.ai); usedK.add(c.ki);
-      pairs.push({ axis: axisDets[c.ai], kp8: kp8Dets[c.ki] });
-    }
+    if (c.iou < 0.05) continue; // avoid pairing across teeth
+    usedA.add(c.ai); usedK.add(c.ki);
+    pairs.push({ axis: axisDets[c.ai], kp8: kp8Dets[c.ki] });
   }
-
-  // Fallback: if nothing paired (weird), pair by left-to-right centers
+  // Fallback: left-to-right if nothing paired
   if (!pairs.length) {
-    const centerX = (b) => (b[0] + b[2]) / 2;
-    const A = axisDets.slice().sort((u,v) => centerX(u.box) - centerX(v.box));
-    const K = kp8Dets.slice().sort((u,v) => centerX(u.box) - centerX(v.box));
+    const cx = (b) => (b[0] + b[2]) / 2;
+    const A = axisDets.slice().sort((u,v) => cx(u.box) - cx(v.box));
+    const K = kp8Dets.slice().sort((u,v) => cx(u.box) - cx(v.box));
     const n = Math.min(A.length, K.length);
     for (let i=0;i<n;i++) pairs.push({ axis: A[i], kp8: K[i] });
   }
   return pairs;
 };
+// Fuse 2-KP axis detections with 8-KP landmarks and emit two side-specific detections (M & D),
+// all in CANVAS coordinates via the provided toCanvas mapper.
+const fuseDetections = (axisDets, kp8Dets, toCanvas) => {
+  const pairs = pairDetectionsByIoU(axisDets, kp8Dets);
+  const d = (P, Q) => Math.hypot(P.x - Q.x, P.y - Q.y);
 
+  return pairs.flatMap(({ axis, kp8 }) => {
+    // Axis endpoints (canvas space)
+    const A1 = toCanvas(axis.points[0]);
+    const A2 = toCanvas(axis.points[1]);
+
+    // 8-KP landmarks (canvas space)
+    const K = kp8.points;
+    const crownM = toCanvas(K[KP8_IDX.crownM]);
+    const cejM   = toCanvas(K[KP8_IDX.cejM]);
+    const boneM  = toCanvas(K[KP8_IDX.boneM]);
+    const apexM  = toCanvas(K[KP8_IDX.apexM]);
+
+    const crownD = toCanvas(K[KP8_IDX.crownD]);
+    const cejD   = toCanvas(K[KP8_IDX.cejD]);
+    const boneD  = toCanvas(K[KP8_IDX.boneD]);
+    const apexD  = toCanvas(K[KP8_IDX.apexD]);
+
+    // Orient the axis per side, using that side's crown tip (nearest end = crown)
+    let crownAxisM = A1, apexAxisM = A2;
+    if (d(A1, crownM) > d(A2, crownM)) { crownAxisM = A2; apexAxisM = A1; }
+
+    let crownAxisD = A1, apexAxisD = A2;
+    if (d(A1, crownD) > d(A2, crownD)) { crownAxisD = A2; apexAxisD = A1; }
+
+    return [
+      {
+        id: makeId(),
+        axis: [crownAxisM, apexAxisM],
+        aiPoints: { crownTip: crownM, cej: cejM, boneLevel: boneM, rootApex: apexM },
+        status: 'pending',
+      },
+      {
+        id: makeId(),
+        axis: [crownAxisD, apexAxisD],
+        aiPoints: { crownTip: crownD, cej: cejD, boneLevel: boneD, rootApex: apexD },
+        status: 'pending',
+      },
+    ];
+  });
+};
+
+const projScalar = (P, A, B) => {
+  const abx = B.x - A.x, aby = B.y - A.y;
+  const apx = P.x - A.x, apy = P.y - A.y;
+  const denom = (abx*abx + aby*aby) || 1e-6;
+  return (apx*abx + apy*aby) / denom;
+};
+const pointAtT = (A, B, t) => ({ x: A.x + t*(B.x - A.x), y: A.y + t*(B.y - A.y) });
 const makeId = () => Math.random().toString(36).slice(2, 9);
 
 // ---------- Component ----------
 const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => {
+  const [preAnalyzedData, setPreAnalyzedData] = useState(null);
+  const processedImageRef = useRef(null); // This will hold the loaded image element
+  const [lockDetSelection, setLockDetSelection] = useState(false);
   // App state
+  const [activeDetId, setActiveDetId] = useState(null); // clicked detection
+  const [hoverDetId, setHoverDetId]   = useState(null); // hovered detection
   const [step, setStep] = useState(() =>
     initialData?.processedImage ? ProcessingStep.ANNOTATE : ProcessingStep.UPLOAD
   );
@@ -323,14 +353,23 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
   const [annotationPoints, setAnnotationPoints] = useState([]);
   const [mousePos, setMousePos] = useState(null);
 
-  // Pending detections (paired axis + kp8)
-  const [pendingDetections, setPendingDetections] = useState([]);
+  // show “AI Analyze” only when user chose the AI no-crop upload
+  const [aiUploadOnly, setAiUploadOnly] = useState(false);
 
+  // Pending detections
+  const [pendingDetections, setPendingDetections] = useState([]);
+  const [showPreAnalyzeModal, setShowPreAnalyzeModal] = useState(false);
+  // --- NEW: payload parked until ANNOTATE canvas is mounted ---
+  const [preAI, setPreAI] = useState(null);
+
+// --- NEW: a dedicated ref to guarantee we read ANNOTATE canvas dimensions ---
+  const annotateCanvasRef = useRef(null);
   // Dragging/inputs
   const draggingRef = useRef(null);
   const lastInteractionTime = useRef(0);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
+  const fileAiInputRef = useRef(null);
 
   // AI sessions
   const [kp8Session, setKp8Session] = useState(null);
@@ -364,7 +403,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
       }
     })();
   }, []);
-
+  
   // Sync initial data later
   useEffect(() => {
     if (initialData?.processedImage) {
@@ -373,51 +412,61 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
       setStep(ProcessingStep.ANNOTATE);
     }
   }, [initialData]);
-
-  // Faded overlay for pending list
+  
+  // --------- Drawing helpers ----------
   const drawAIPendingOverlay = (ctx) => {
-    const alpha = 0.45;
-    pendingDetections.forEach(det => {
-      if (det.status !== 'pending') return;
-      const [a, b] = det.axis;
-      const pts = [det.aiPoints.crownTip, det.aiPoints.cej, det.aiPoints.boneLevel, det.aiPoints.rootApex];
+  pendingDetections.forEach(det => {
+    if (det.status !== 'pending') return;
 
-      ctx.save();
-      ctx.globalAlpha = alpha;
+    const isActive = det.id === activeDetId;
+    const isHover  = det.id === hoverDetId;
 
-      // Axis
+    // visual emphasis
+    const alpha      = isActive ? 1.0 : (isHover ? 0.75 : 0.35);
+    const axisDash   = isActive ? [] : [6, 4];
+    const axisColor  = isActive ? 'rgba(37,99,235,1)'  : 'rgba(37,99,235,0.8)';
+    const pointSize  = isActive ? 6 : 4;
+
+    const [a, b] = det.axis;
+    const pts = [det.aiPoints.crownTip, det.aiPoints.cej, det.aiPoints.boneLevel, det.aiPoints.rootApex];
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // Axis
+    ctx.beginPath();
+    ctx.setLineDash(axisDash);
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = axisColor;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Points + rays
+    pts.forEach((p, i) => {
+      // point
       ctx.beginPath();
-      ctx.setLineDash([6, 4]);
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = 'rgba(37,99,235,1)';
+      ctx.arc(p.x, p.y, pointSize, 0, 2 * Math.PI);
+      ctx.fillStyle = pointColors[i];
+      ctx.fill();
+
+      // ray to axis
+      const pr = projectPointOnLine(p, a, b);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(pr.x, pr.y);
+      ctx.setLineDash([2, 2]);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(59,130,246,0.7)';
       ctx.stroke();
       ctx.setLineDash([]);
-
-      // Points + rays
-      pts.forEach((p, i) => {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 5, 0, 2 * Math.PI);
-        ctx.fillStyle = pointColors[i];
-        ctx.fill();
-
-        const pr = projectPointOnLine(p, a, b);
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y);
-        ctx.lineTo(pr.x, pr.y);
-        ctx.setLineDash([2, 2]);
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = 'rgba(59,130,246,0.7)';
-        ctx.stroke();
-        ctx.setLineDash([]);
-      });
-
-      ctx.restore();
     });
-  };
 
-  // Drawing
+    ctx.restore();
+  });
+};
+
   const drawAnalysisLines = (ctx, report, color) => {
     const [axisStart, axisEnd] = report.axis;
     ctx.beginPath();
@@ -444,114 +493,168 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     });
   };
 
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current; if (!canvas) return;
-    const ctx = canvas.getContext('2d'); if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Find and replace this entire function in ImageAnalyzer.jsx
+const draw = useCallback(() => {
+  const canvas = canvasRef.current;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
 
-    if (step === ProcessingStep.KEYSTONE && originalImage) {
-      ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = '#00FFFF';
-      ctx.lineWidth = 2;
+  // Clear
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // ----- STEP 1: KEYSTONE (show original upload with draggable corners) -----
+  if (step === ProcessingStep.KEYSTONE && originalImage) {
+    // Draw the image stretched to the canvas (no letterbox).
+    // (Matches processKeystone() which maps by simple canvas<->image scaling.)
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
+
+    // Keystone polygon + handles
+    ctx.save();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(59,130,246,0.9)'; // blue
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(keystonePoints[0].x, keystonePoints[0].y);
+    ctx.lineTo(keystonePoints[1].x, keystonePoints[1].y);
+    ctx.lineTo(keystonePoints[2].x, keystonePoints[2].y);
+    ctx.lineTo(keystonePoints[3].x, keystonePoints[3].y);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Corner handles
+    keystonePoints.forEach(p => {
       ctx.beginPath();
-      ctx.moveTo(keystonePoints[0].x, keystonePoints[0].y);
-      for (let i = 1; i < 4; i++) ctx.lineTo(keystonePoints[i].x, keystonePoints[i].y);
-      ctx.closePath(); ctx.stroke();
-      keystonePoints.forEach(p => {
-        ctx.fillStyle = '#00FFFF';
-        ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, 2 * Math.PI); ctx.fill();
+      ctx.arc(p.x, p.y, 7, 0, 2 * Math.PI);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(59,130,246,1)';
+      ctx.stroke();
+    });
+    ctx.restore();
+    return; // IMPORTANT: do not fall through to ANNOTATE drawing
+  }
+
+  // ----- STEP 2: ANNOTATE (letterboxed processed image + overlays) -----
+  const img = processedImageRef.current;
+  if (!img) return; // nothing to draw yet
+
+  const { ratio, ox, oy, newW, newH } = makeLetterboxToCanvas(
+    img.naturalWidth, img.naturalHeight, canvas.width, canvas.height
+  );
+
+  // Optional diagnostics
+  logMapping(
+    'ANNOTATE DRAW (canvas paint)',
+    img.naturalWidth, img.naturalHeight,
+    canvas.width, canvas.height,
+    ratio, ox, oy,
+    pendingDetections?.[0]
+  );
+
+  // Background + image
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, ox, oy, newW, newH);
+
+  // Overlays
+  if (pendingDetections.length > 0) drawAIPendingOverlay(ctx);
+  completedReports.forEach(r => {
+    if (r.id !== activeTooth?.id) drawAnalysisLines(ctx, r, '#888888');
+  });
+
+  // Active manual annotations (your existing code)
+  if (activeTooth) {
+    if (toothAxisPoints.length > 0) {
+      ctx.beginPath();
+      ctx.moveTo(toothAxisPoints[0].x, toothAxisPoints[0].y);
+      const endPoint = toothAxisPoints.length === 2
+        ? toothAxisPoints[1]
+        : (annotationSubStep === 'DRAW_AXIS' && mousePos ? mousePos : null);
+      if (endPoint) ctx.lineTo(endPoint.x, endPoint.y);
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      toothAxisPoints.forEach(p => {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 2 * Math.PI); ctx.fill();
       });
-      return;
     }
-
-    if (step === ProcessingStep.ANNOTATE && processedImage) {
-      const img = new Image();
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-        // Pending overlay (dashed axes + faded points)
-        if (pendingDetections.length) drawAIPendingOverlay(ctx);
-
-        // Greyed-out completed (other teeth)
-        completedReports.forEach(r => {
-          if (r.id !== activeTooth?.id) drawAnalysisLines(ctx, r, '#888888');
-        });
-
-        // Active tooth
-        if (activeTooth) {
-          if (toothAxisPoints.length > 0) {
-            ctx.beginPath();
-            ctx.moveTo(toothAxisPoints[0].x, toothAxisPoints[0].y);
-            const endPoint = toothAxisPoints.length === 2
-              ? toothAxisPoints[1]
-              : (annotationSubStep === 'DRAW_AXIS' && mousePos ? mousePos : null);
-            if (endPoint) ctx.lineTo(endPoint.x, endPoint.y);
-            ctx.strokeStyle = '#FFFFFF';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            toothAxisPoints.forEach(p => {
-              ctx.fillStyle = '#FFFFFF';
-              ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 2 * Math.PI); ctx.fill();
-            });
-          }
-
-          if (toothAxisPoints.length === 2) {
-            annotationPoints.forEach((p, i) => {
-              const projectedP = projectPointOnLine(p, toothAxisPoints[0], toothAxisPoints[1]);
-              ctx.beginPath();
-              ctx.moveTo(p.x, p.y);
-              ctx.lineTo(projectedP.x, projectedP.y);
-              const idx = usePaAnalysis ? i : i + 1;
-              ctx.strokeStyle = pointColors[idx];
-              ctx.lineWidth = 1;
-              ctx.setLineDash([2, 2]); ctx.stroke(); ctx.setLineDash([]);
-              ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 2 * Math.PI);
-              ctx.fillStyle = pointColors[idx]; ctx.fill();
-            });
-
-            const required = usePaAnalysis ? 5 : 2;
-            if (mousePos && annotationSubStep === 'PLACE_POINTS' && annotationPoints.length < required) {
-              const projectedP = projectPointOnLine(mousePos, toothAxisPoints[0], toothAxisPoints[1]);
-              ctx.beginPath(); ctx.moveTo(mousePos.x, mousePos.y); ctx.lineTo(projectedP.x, projectedP.y);
-              const idx = usePaAnalysis ? annotationPoints.length : annotationPoints.length + 1;
-              ctx.strokeStyle = pointColors[idx];
-              ctx.lineWidth = 1; ctx.setLineDash([2, 2]); ctx.stroke(); ctx.setLineDash([]);
-            }
-          }
-        }
-      };
-      img.src = processedImage;
+    if (toothAxisPoints.length === 2) {
+      annotationPoints.forEach((p, i) => {
+        const projectedP = projectPointOnLine(p, toothAxisPoints[0], toothAxisPoints[1]);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(projectedP.x, projectedP.y);
+        const idx = usePaAnalysis ? i : i + 1;
+        ctx.strokeStyle = pointColors[idx];
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 2]); ctx.stroke(); ctx.setLineDash([]);
+        ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 2 * Math.PI);
+        ctx.fillStyle = pointColors[idx]; ctx.fill();
+      });
+      const required = usePaAnalysis ? 5 : 2;
+      if (mousePos && annotationSubStep === 'PLACE_POINTS' && annotationPoints.length < required) {
+        const projectedP = projectPointOnLine(mousePos, toothAxisPoints[0], toothAxisPoints[1]);
+        ctx.beginPath(); ctx.moveTo(mousePos.x, mousePos.y); ctx.lineTo(projectedP.x, projectedP.y);
+        const idx = usePaAnalysis ? annotationPoints.length : annotationPoints.length + 1;
+        ctx.strokeStyle = pointColors[idx];
+        ctx.lineWidth = 1; ctx.setLineDash([2, 2]); ctx.stroke(); ctx.setLineDash([]);
+      }
     }
-  }, [
-    originalImage, step, keystonePoints, processedImage,
-    pendingDetections,
-    annotationPoints, activeTooth, completedReports, toothAxisPoints, mousePos, annotationSubStep, usePaAnalysis
-  ]);
+  }
+}, [
+  step, originalImage, processedImage, pendingDetections, completedReports,
+  activeTooth, toothAxisPoints, annotationPoints, mousePos, usePaAnalysis,
+  annotationSubStep, activeDetId, hoverDetId   // <— add these
+]);
 
   useEffect(() => { draw(); }, [draw]);
-
+  useEffect(() => {
+  if (!processedImage) return;
+  const img = new Image();
+  img.onload = () => {
+    processedImageRef.current = img;
+    draw(); // repaint with the loaded image
+  };
+  img.src = processedImage;
+}, [processedImage, draw]);
   // Pointer interactions
   const near = (p, q, r = 12) => Math.hypot(p.x - q.x, p.y - q.y) <= r;
-
   const getCanvasPoint = (e) => {
-    const canvas = canvasRef.current; if (!canvas) return { x: 0, y: 0 };
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const scaleX = canvas.width  / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top)  * scaleY,
+    };
   };
 
   const handleInteractionStart = (e) => {
-    const now = Date.now();
-    if (now - lastInteractionTime.current < 50) return;
-    lastInteractionTime.current = now;
-    if (!e.isPrimary) return;
-    e.preventDefault();
-    canvasRef.current?.setPointerCapture(e.pointerId);
-    const p = getCanvasPoint(e);
+  const now = Date.now();
+  if (now - lastInteractionTime.current < 50) return;
+  lastInteractionTime.current = now;
+  if (!e.isPrimary) return;
+  e.preventDefault();
+  canvasRef.current?.setPointerCapture(e.pointerId);
+  const p = getCanvasPoint(e);
 
-    if (step === ProcessingStep.KEYSTONE) {
-      const idx = keystonePoints.findIndex((kp) => near(kp, p, 12));
-      if (idx !== -1) { draggingRef.current = { type: 'keystone', index: idx }; return; }
-    } else if (step === ProcessingStep.ANNOTATE && activeTooth) {
+  // NEW: pick an AI detection (canvas-first UX)
+  if (step === ProcessingStep.ANNOTATE && !lockDetSelection) {
+  const id = hitTestDetectionAtPoint(p, pendingDetections);
+  if (id) { setActiveDetId(id); return; }
+}
+
+  // existing manual logic…
+  if (step === ProcessingStep.KEYSTONE) {
+    const idx = keystonePoints.findIndex((kp) => near(kp, p, 12));
+    if (idx !== -1) { draggingRef.current = { type: 'keystone', index: idx }; return; }
+  } else if (step === ProcessingStep.ANNOTATE && activeTooth) {
       for (let i = 0; i < toothAxisPoints.length; i++) {
         if (near(toothAxisPoints[i], p, 12)) { draggingRef.current = { type: 'axis', index: i }; return; }
       }
@@ -573,6 +676,12 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
   const handleInteractionMove = (e) => {
     const p = getCanvasPoint(e);
     setMousePos(p);
+    if (step === ProcessingStep.ANNOTATE && !lockDetSelection) {
+  const id = hitTestDetectionAtPoint(p, pendingDetections);
+  setHoverDetId(id);
+} else {
+  if (hoverDetId) setHoverDetId(null);
+}
     const drag = draggingRef.current;
     if (drag && canvasRef.current?.hasPointerCapture(e.pointerId)) {
       if (drag.type === 'keystone') {
@@ -593,7 +702,10 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     draggingRef.current = null;
   };
 
-  // File handlers
+  // ---------- File handlers ----------
+  // Normal upload -> Keystone crop workflow
+  
+
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -602,6 +714,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
         if (event.target?.result) {
           const img = new Image();
           img.onload = () => {
+            setAiUploadOnly(false);
             setOriginalImage(img);
             const MAX_DIM = 500;
             let newWidth, newHeight;
@@ -624,6 +737,94 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     }
   };
 
+  // No-crop upload (analyze in place)
+  const handleFileChangeAIDirect = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result;
+        if (!dataUrl) return;
+        setProcessedImage(dataUrl);
+        setOriginalImage(null);
+        setAiUploadOnly(true);
+        setPendingDetections([]);
+        setCompletedReports([]);
+        setActiveTooth(null);
+        setAnnotationSubStep('SELECT');
+        setStep(ProcessingStep.ANNOTATE);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+  // Accept results from AIPreAnalyzeModal and map image-pixel coords → annotation canvas
+// ---------- *** THE FIX IS HERE *** ----------
+  const handlePreAnalyzeDone = (payload) => {
+    setPreAnalyzedData(payload); // Park the data
+    setStep(ProcessingStep.ANNOTATE); // Switch to the annotation view
+    setShowPreAnalyzeModal(false);
+  };
+  
+  useEffect(() => {
+    if (step !== ProcessingStep.ANNOTATE || !preAnalyzedData) return;
+
+    // 1. Load the image from the modal's data URL
+    const img = new Image();
+    img.onload = () => {
+        processedImageRef.current = img; // Store the loaded image element in our ref
+        setProcessedImage(preAnalyzedData.imageDataUrl); // Update state to trigger redraw
+
+        // 2. Now that the image is loaded, we can safely map coordinates
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const { imageWidth, imageHeight, detections } = preAnalyzedData;
+        const { ratio, ox, oy, toCanvas } =
+  makeLetterboxToCanvas(imageWidth, imageHeight, canvas.width, canvas.height);
+
+// Log the exact mapping numbers you will use
+logMapping(
+  'MAPPING EFFECT (image → canvas)',
+  imageWidth, imageHeight,
+  canvas.width, canvas.height,
+  ratio, ox, oy,
+  preAnalyzedData?.detections?.[0]   // raw (image-space) detection for reference
+);
+
+        const mappedDetections = detections.map(d => ({
+            id: d.id,
+            status: 'pending',
+            axis: [toCanvas(d.axis[0]), toCanvas(d.axis[1])],
+            aiPoints: {
+                crownTip: toCanvas(d.aiPoints.crownTip),
+                cej: toCanvas(d.aiPoints.cej),
+                boneLevel: toCanvas(d.aiPoints.boneLevel),
+                rootApex: toCanvas(d.aiPoints.rootApex),
+            },
+        }));
+
+        setPendingDetections(mappedDetections);
+        // --- 🔽 ADD THIS CONSOLE LOG HERE 🔽 ---
+        if (mappedDetections.length > 0) {
+          console.log(
+            '%c--- DATA IN IMAGE ANALYZER (AFTER MAPPING) ---',
+            'color: cyan; font-weight: bold;',
+            {
+              canvasDimensions: {
+                width: canvas.width,
+                height: canvas.height,
+              },
+              firstDetectionMapped: mappedDetections[0],
+            }
+          );
+        }
+        // --- 🔼 END OF CONSOLE LOG 🔼 ---
+        setPreAnalyzedData(null); // Clear the parked data
+    };
+    img.src = preAnalyzedData.imageDataUrl;
+
+}, [step, preAnalyzedData]);
+
   const handleStartOver = () => {
     setStep(ProcessingStep.UPLOAD);
     setOriginalImage(null);
@@ -634,7 +835,10 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     setAnnotationPoints([]);
     setAnnotationSubStep('SELECT');
     setPendingDetections([]);
+    setAiUploadOnly(false);
+    setLockDetSelection(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    if (fileAiInputRef.current) fileAiInputRef.current.value = '';
   };
 
   const processKeystone = () => {
@@ -672,10 +876,11 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
     drawTriangle(d2, d3, d4, p[1], p[2], p[3]);
 
     setProcessedImage(tempCanvas.toDataURL());
+    setAiUploadOnly(false);
     setStep(ProcessingStep.ANNOTATE);
   };
 
-  // Manual analyze
+  // ---------- Manual analyze ----------
   const analyzePoints = () => {
     if (toothAxisPoints.length < 2 || !activeTooth) return;
     const [axisStart, axisEnd] = toothAxisPoints;
@@ -733,11 +938,12 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
       annotations: annotationPoints
     };
 
-    setCompletedReports(prev => [...prev.filter(r => r.id !== activeTooth.id), newReport]);
+    setCompletedReports(prev => [...prev.filter(r => pendingDetections.length.id !== activeTooth.id), newReport]);
     setActiveTooth(null);
     setAnnotationSubStep('SELECT');
     setToothAxisPoints([]);
     setAnnotationPoints([]);
+    setLockDetSelection(false);
   };
 
   const handleSave = () => {
@@ -747,90 +953,64 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
   };
 
   const selectToothForAnalysis = (toothNumber, side) => {
-    const id = `${toothNumber}${side}`;
-    const existingReport = completedReports.find(r => r.id === id);
-    if (existingReport) {
-      setToothAxisPoints(existingReport.axis);
-      setAnnotationPoints(existingReport.annotations);
-      setAnnotationSubStep('PLACE_POINTS');
-    } else {
-      setToothAxisPoints([]);
-      setAnnotationPoints([]);
-      setAnnotationSubStep('DRAW_AXIS');
-    }
-    setActiveTooth({ number: toothNumber, side, id });
-  };
-
-  // ---------- Single "AI Analyze" (combined) ----------
-  const runAiAnalyze = async () => {
-  if (!processedImage || !kp8Session || !kp2Session) return;
-  setIsAnalyzingAi(true);
-  try {
-    const img = await new Promise((resolve) => {
-      const im = new Image(); im.onload = () => resolve(im); im.src = processedImage;
-    });
-
-    const { tensor, letterbox } = buildNCHW3x640Float(img);
-    const res8 = await kp8Session.run({ [kp8Session.inputNames[0]]: tensor });
-    const res2 = await kp2Session.run({ [kp2Session.inputNames[0]]: tensor });
-
-    const kp8Det = parseDetectionsFromONNX(res8, kp8Session, 8, letterbox);
-      const axDet  = parseDetectionsFromONNX(res2, kp2Session, 2, letterbox);
-    if (kp8Det.length === 0 || axDet.length === 0) {
-      alert('AI could not detect any teeth/landmarks. Please adjust crop or annotate manually.');
-      return;
-    }
-
-    const pairs = pairDetectionsByIoU(axDet, kp8Det);
-    const toCanvas = toCanvasMapper(img, canvasRef.current);
-
-    // For EACH tooth, create TWO pending detections (share the same axis)
-    const newDetections = pairs.flatMap(({ axis, kp8 }) => {
-        const A1 = axis.points[0]; // Directly use the point
-        const A2 = axis.points[1]; // Directly use the point
-        
-        const K = kp8.points;
-        const crown = K[0]; 
-      const apex  = K[4];
-
-      // Use your two CEJ candidates (K[1] and K[7]) as the two sides
-      const cejL = K[1];
-      const cejR = K[7];
-
-      // Put bone on the axis at the midpoint between CEJ and Apex (by axis parameter t)
-      const tApex = projScalar(apex, A1, A2);
-      const tCejL = projScalar(cejL, A1, A2);
-      const tCejR = projScalar(cejR, A1, A2);
-      const boneL = pointAtT(A1, A2, (tApex + tCejL) / 2);
-      const boneR = pointAtT(A1, A2, (tApex + tCejR) / 2);
-
-      // Return TWO detections (side-agnostic; you choose M/D in the UI)
-      return [
-        {
-          id: makeId(),
-          axis: [A1, A2],
-          aiPoints: { crownTip: crown, cej: cejL, boneLevel: boneL, rootApex: apex },
-          status: 'pending'
-        },
-        {
-          id: makeId(),
-          axis: [A1, A2],
-          aiPoints: { crownTip: crown, cej: cejR, boneLevel: boneR, rootApex: apex },
-          status: 'pending'
-        }
-      ];
-    });
-
-    // If you want to REPLACE previous pending results, use setPendingDetections(newDetections)
-    setPendingDetections(prev => [...prev, ...newDetections]);
-  } catch (e) {
-    console.error('AI analysis failed', e);
-    alert(`AI analysis failed: ${e?.message ?? 'Unknown error'}`);
-  } finally {
-    setIsAnalyzingAi(false);
+  // If user has selected an AI detection, assign it directly
+  if (activeDetId) {
+    assignDetectionToTooth(activeDetId, toothNumber, side);
+    setActiveDetId(null);
+    return;
   }
-};
 
+  // --- manual path (unchanged) ---
+  const id = `${toothNumber}${side}`;
+  const existingReport = completedReports.find(r => r.id === id);
+  if (existingReport) {
+    setToothAxisPoints(existingReport.axis);
+    setAnnotationPoints(existingReport.annotations);
+    setAnnotationSubStep('PLACE_POINTS');
+  } else {
+    setToothAxisPoints([]);
+    setAnnotationPoints([]);
+    setAnnotationSubStep('DRAW_AXIS');
+  }
+  setActiveTooth({ number: toothNumber, side, id });
+};
+  // ---------- Single "AI Analyze" ----------
+  const runAiAnalyze = async () => {
+    
+    if (!processedImage || !kp8Session || !kp2Session) return;
+    setIsAnalyzingAi(true);
+    try {
+      const img = await new Promise((resolve) => {
+        const im = new Image(); im.onload = () => resolve(im); im.src = processedImage;
+      });
+
+      const { tensor, letterbox } = buildNCHW3x640Float(img);
+      const res8 = await kp8Session.run({ [kp8Session.inputNames[0]]: tensor });
+      const res2 = await kp2Session.run({ [kp2Session.inputNames[0]]: tensor });
+
+      const kp8Det = extractDetections(res8, kp8Session, 8, letterbox);
+      const axDet  = extractDetections(res2, kp2Session, 2, letterbox);
+      if (kp8Det.length === 0 || axDet.length === 0) {
+        alert('AI could not detect any teeth/landmarks. Please adjust image or annotate manually.');
+        return;
+      }
+
+      const pairs = pairDetectionsByIoU(axDet, kp8Det);
+      const cw = canvasRef.current.width, ch = canvasRef.current.height;
+const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+const { toCanvas } = makeLetterboxToCanvas(iw, ih, cw, ch);
+
+      // For EACH tooth, create TWO pending detections (share the same axis)
+      const newDetections = fuseDetections(axDet, kp8Det, toCanvas);
+
+      setPendingDetections(prev => [...prev, ...newDetections]);
+    } catch (e) {
+      console.error('AI analysis failed', e);
+      alert(`AI analysis failed: ${e?.message ?? 'Unknown error'}`);
+    } finally {
+      setIsAnalyzingAi(false);
+    }
+  };
 
   const assignDetectionToTooth = (detId, toothNumber, side) => {
     const det = pendingDetections.find(d => d.id === detId);
@@ -849,7 +1029,9 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
       setAnnotationPoints([det.aiPoints.cej, det.aiPoints.boneLevel]);
     }
     setAnnotationSubStep('PLACE_POINTS');
-
+    setLockDetSelection(true); 
+    setActiveDetId(null);
+    setHoverDetId(null);
     setPendingDetections(prev => prev.map(d => d.id === detId
       ? { ...d, status: 'assigned', assigned: { toothNumber, side } }
       : d
@@ -867,12 +1049,14 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
         return (
           <div className="text-center">
             <h3 className="text-xl font-semibold mb-4 text-gray-800">Upload X-Ray</h3>
-            <div className="flex justify-center items-center">
+
+            <div className="flex flex-col sm:flex-row justify-center items-center gap-3">
+              {/* Normal upload -> Keystone */}
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex flex-col items-center gap-2 p-6 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors border"
+                className="flex items-center gap-2 px-4 py-3 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors border"
               >
-                <UploadIcon className="w-12 h-12 text-blue-600" />
+                <UploadIcon className="w-5 h-5 text-blue-600" />
                 <span>Upload File</span>
               </button>
               <input
@@ -882,6 +1066,8 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
                 accept="image/png, image/jpeg"
                 className="hidden"
               />
+
+              
             </div>
           </div>
         );
@@ -900,7 +1086,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
               onPointerMove={handleInteractionMove}
               onPointerUp={handleInteractionEnd}
               onPointerCancel={handleInteractionEnd}
-              onPointerLeave={(e) => { setMousePos(null); handleInteractionEnd(e); }}
+              onPointerLeave={(e) => { setMousePos(null); setHoverDetId(null); handleInteractionEnd(e); }}
             ></canvas>
             <div className="text-center mt-4">
               <button onClick={processKeystone} className="px-6 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-md font-semibold transition-colors">
@@ -929,14 +1115,14 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
                 <h3 className="text-lg font-semibold text-gray-800">Step 2: Analyze Teeth</h3>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={runAiAnalyze}
-                    disabled={aiModelsLoading || !processedImage || isAnalyzingAi}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400"
-                    title="Run AI analysis"
-                  >
-                    <MagicWandIcon className={`w-4 h-4 ${isAnalyzingAi ? 'animate-spin' : ''}`} />
-                    <span>{isAnalyzingAi ? 'Analyzing…' : 'AI Analyze'}</span>
-                  </button>
+  onClick={runAiAnalyze}
+  disabled={aiModelsLoading || !processedImage || isAnalyzingAi}
+  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400"
+  title="Run AI analysis"
+>
+  <MagicWandIcon className={`w-4 h-4 ${isAnalyzingAi ? 'animate-spin' : ''}`} />
+  <span>{isAnalyzingAi ? 'Analyzing…' : 'AI Analyze'}</span>
+</button>
                   <button
                     onClick={handleStartOver}
                     className="ml-2 flex items-center gap-2 px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-semibold"
@@ -950,7 +1136,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
               <p className="text-center text-blue-600 h-6 mb-2 font-semibold">{instruction}</p>
 
               <canvas
-                ref={canvasRef}
+                ref={canvasRef} // --- FIX: Simplified ref assignment
                 width={isVertical ? 360 : 480}
                 height={isVertical ? 480 : 360}
                 className="bg-gray-900 mx-auto rounded-md cursor-crosshair touch-none"
@@ -958,63 +1144,39 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
                 onPointerMove={handleInteractionMove}
                 onPointerUp={handleInteractionEnd}
                 onPointerCancel={handleInteractionEnd}
-                onPointerLeave={(e) => { setMousePos(null); handleInteractionEnd(e); }}
+                onPointerLeave={(e) => { setMousePos(null); setHoverDetId(null); handleInteractionEnd(e); }}
               ></canvas>
             </div>
 
             <div className="md:col-span-1 flex flex-col">
               {pendingDetections.length > 0 && (
-                <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-3">
-                  <h4 className="font-semibold text-purple-800 mb-2 flex items-center gap-2">
-  <MagicWandIcon className="w-4 h-4" />
-  AI Pending Detections ({pendingDetections.filter(d => d.status === 'pending').length})
-</h4>
-                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                    {pendingDetections.map(det => (
-                      <div key={det.id} className="bg-white rounded border p-2">
-                        <p className="text-xs text-gray-600 mb-2">
-                          Status: <span className="font-semibold">{det.status}</span>
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <select
-                            className="border rounded px-2 py-1 text-sm"
-                            defaultValue={det.assigned?.toothNumber ?? ''}
-                            onChange={(e) => det.assigned = { ...(det.assigned || {}), toothNumber: e.target.value, side: det.assigned?.side ?? 'M' }}
-                          >
-                            <option value="" disabled>Tooth</option>
-                            {teethInSlot.map(t => <option key={t} value={t}>{t}</option>)}
-                          </select>
-                          <select
-                            className="border rounded px-2 py-1 text-sm"
-                            defaultValue={det.assigned?.side ?? 'M'}
-                            onChange={(e) => det.assigned = { ...(det.assigned || {}), toothNumber: det.assigned?.toothNumber ?? '', side: e.target.value }}
-                          >
-                            <option value="M">M</option>
-                            <option value="D">D</option>
-                          </select>
-                          <button
-                            className="px-2 py-1 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
-                            onClick={() => {
-                              const t = det.assigned?.toothNumber;
-                              const s = det.assigned?.side;
-                              if (!t || !s) { alert('Select tooth and side.'); return; }
-                              assignDetectionToTooth(det.id, t, s);
-                            }}
-                          >
-                            Set & Refine
-                          </button>
-                          <button
-                            className="px-2 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300"
-                            onClick={() => discardDetection(det.id)}
-                          >
-                            Discard
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+  <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-3">
+    <h4 className="font-semibold text-purple-800 mb-2 flex items-center gap-2">
+      <MagicWandIcon className="w-4 h-4" />
+      AI found: {pendingDetections.filter(d => d.status === 'pending').length}
+    </h4>
+
+    {activeDetId && (
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          className="px-3 py-1 text-sm rounded bg-red-600 text-white hover:bg-red-700"
+          onClick={() => { discardDetection(activeDetId); setActiveDetId(null); }}
+        >
+          Discard selected
+        </button>
+        <button
+          className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300"
+          onClick={() => setActiveDetId(null)}
+        >
+          Clear selection
+        </button>
+        <span className="text-xs text-gray-600 ml-auto">
+          Tip: click a faded group on the image, then choose tooth side (e.g., 26M).
+        </span>
+      </div>
+    )}
+  </div>
+)}
 
               <div>
                 <h4 className="font-semibold mb-2 text-gray-800">1. Select a tooth area to analyze/edit:</h4>
@@ -1061,7 +1223,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
                   {annotationSubStep === 'PLACE_POINTS' && (
                     <>
                       <ul className="space-y-2">
-                        {(usePaAnalysis ? annotationLabels : annotationLabels.slice(1)).map((label, i) => (
+                        {(usePaAnalysis ? paAnnotationLabels : bwAnnotationLabels).map((label, i) => (
                           <li key={label} className="flex items-center gap-2">
                             <span className="w-4 h-4 rounded-full border border-gray-400" style={{ backgroundColor: pointColors[usePaAnalysis ? i : i + 1] }}></span>
                             <span className={`${annotationPoints.length > i ? 'line-through text-gray-400' : 'text-gray-700'}`}>{label}</span>
@@ -1072,7 +1234,12 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
 
                       <div className="mt-4 flex gap-2">
                         <button
-                          onClick={() => { setAnnotationPoints([]); setToothAxisPoints([]); setAnnotationSubStep('DRAW_AXIS'); }}
+                          onClick={() => {
+  setAnnotationPoints([]);
+  setToothAxisPoints([]);
+  setAnnotationSubStep('DRAW_AXIS');
+  setLockDetSelection(false);   // also unlock on reset
+}}
                           className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm"
                         >
                           Reset
@@ -1147,6 +1314,13 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
           <CloseIcon className="w-6 h-6" />
         </button>
         {renderStepContent()}
+        {showPreAnalyzeModal && (
+  <AIPreAnalyzeModal
+    isOpen={showPreAnalyzeModal}
+    onClose={() => setShowPreAnalyzeModal(false)}
+    onContinue={handlePreAnalyzeDone}
+  />
+)}
       </div>
     </div>
   );
