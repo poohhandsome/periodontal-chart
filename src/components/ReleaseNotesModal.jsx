@@ -5,6 +5,9 @@ import React from 'react';
 import { CloseIcon } from './xray-analyzer/Icons';
 
 const releaseNotes = [
+    { version: '1.1.3.1', date: '2025-08-22',notes: ['XRay: Autosave Mounting and Tooth Analysis',
+        'XRay: Add Essential Buttons for Users'
+    ]},
     { version: '1.1.3', date: '2025-08-20',notes: ['XRay: Add AI 2-KP,8-KP model 1.0']},
     { version: '1.1.2', date: '2025-08-15',notes: ['XRay: Export to PDF Updated']},
     { version: '1.1.1b', date: '2025-08-14',notes: ['XRay Layout Updated']},

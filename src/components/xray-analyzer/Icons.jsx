@@ -75,3 +75,18 @@ export const MagicWandIcon = ({ className }) => (
     />
   </svg>
 );
+export const RotateIcon = ({ className }) => (
+<svg xmlns="http://www.w3.org/2000/svg" className={className || 'h-5 w-5'} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+<path d="M4 4v6h6" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M20.49 9A9 9 0 106 20.49" strokeLinecap="round" strokeLinejoin="round" />
+</svg>
+);
+
+
+export const TrashIcon = ({ className }) => (
+<svg xmlns="http://www.w3.org/2000/svg" className={className || 'h-5 w-5'} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+<path d="M3 6h18" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M8 6v14a2 2 0 002 2h4a2 2 0 002-2V6" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M10 6l1-2h2l1 2" strokeLinecap="round" strokeLinejoin="round" />
+</svg>
+);

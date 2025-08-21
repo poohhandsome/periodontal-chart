@@ -168,10 +168,13 @@ const XRayApp = () => {
   const handleCloseAnalyzer = () => setActiveSlotId(null);
 
   const handleSaveReport = (updatedSlotData) => {
-    const newSlots = slots.map((slot) => (slot.id === updatedSlotData.id ? { ...slot, ...updatedSlotData } : slot));
-    setAppState((prev) => ({ ...prev, slots: newSlots }));
-    setActiveSlotId(null);
-  };
+  const { __silent, ...clean } = updatedSlotData || {};
+  setAppState(prev => ({
+    ...prev,
+    slots: prev.slots.map(s => s.id === clean.id ? { ...s, ...clean } : s)
+  }));
+  if (!__silent) setActiveSlotId(null); // close only on explicit Save & Close
+};
 
   const handleUpdateBoneLossType = (toothNumber, side, type) => {
     const reportId = `${toothNumber}${side}`;

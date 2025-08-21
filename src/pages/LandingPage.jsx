@@ -36,8 +36,9 @@ const LandingPage = () => {
     );
    const XRayIcon = () => (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 01-6.23-.872l-1.57-.393M19.8 15.3a2.25 2.25 0 00-2.25-2.25H6.45a2.25 2.25 0 00-2.25 2.25m15.6 0A24.226 24.226 0 0112 18.75a24.226 24.226 0 01-7.8-3.45m15.6 0a2.25 2.25 0 01-2.25 2.25h-5.25a2.25 2.25 0 01-2.25-2.25m3.75-12.25c0 .621.504 1.125 1.125 1.125h3.375c.621 0 1.125-.504 1.125-1.125V4.875c0-.621-.504-1.125-1.125-1.125h-3.375A1.125 1.125 0 0011.25 4.875v1.5z" />
-        </svg>
+  <path strokeLinecap="round" strokeLinejoin="round" d="M6 4h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2z" />
+  <path strokeLinecap="round" strokeLinejoin="round" d="M9 10h6m-6 4h6m-6-2h6" />
+</svg>
     );
     
 
@@ -79,14 +80,15 @@ const LandingPage = () => {
                             isBeta={true}
                         />
                     </div>
+                    <div className="md:col-span-2">
                     <ToolCard 
-                        title="X-Ray Analysis"
-                        description="Upload radiographs for manual analysis."
+                        title="X-Ray Mounting & Analysis"
+                        description="Upload radiographs for AI & manual analysis."
                         href="#/xray-analysis"
                         icon={<XRayIcon />}
                         isBeta={true} 
                     />
-                    
+                    </div>
                         
                     
                 </div>
@@ -111,7 +113,7 @@ const LandingPage = () => {
             className="fixed bottom-6 left-6 bg-gray-700 text-white px-4 py-2 rounded-full shadow-lg hover:bg-gray-800 transform hover:scale-105 transition-all duration-200 text-sm font-semibold"
             title="View Release Notes"
         >
-            Version 1.1.3
+            Version 1.1.3.1
         </button>
 
         {/* --- QR DONATE BUTTON --- */}

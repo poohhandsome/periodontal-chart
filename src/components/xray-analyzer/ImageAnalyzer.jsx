@@ -1,9 +1,8 @@
 // src/components/.../ImageAnalyzer.jsx
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import * as ort from 'onnxruntime-web';
 import { ProcessingStep, PrognosisLevel } from '../../xray-types';
-import { UploadIcon, CloseIcon, RedoIcon, MagicWandIcon } from './Icons';
-import { slotConfigurations } from '../../xray-config';
+import { UploadIcon, CloseIcon, RedoIcon, MagicWandIcon, RotateIcon, TrashIcon } from './Icons';import { slotConfigurations } from '../../xray-config';
 import AIPreAnalyzeModal from './AIPreAnalyzeModal';
 
 // ---------- ORT & Models ----------
@@ -330,9 +329,16 @@ const makeId = () => Math.random().toString(36).slice(2, 9);
 
 // ---------- Component ----------
 const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => {
+  
+
+
+  const [extraTeeth, setExtraTeeth] = useState([]); // array of strings like '24'
+  const [addingTooth, setAddingTooth] = useState(false);
+  const [newTooth, setNewTooth] = useState('');
   const [preAnalyzedData, setPreAnalyzedData] = useState(null);
   const processedImageRef = useRef(null); // This will hold the loaded image element
   const [lockDetSelection, setLockDetSelection] = useState(false);
+  const hydratedOnceRef = useRef(false);
   // App state
   const [activeDetId, setActiveDetId] = useState(null); // clicked detection
   const [hoverDetId, setHoverDetId]   = useState(null); // hovered detection
@@ -383,7 +389,7 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
   const usePaAnalysis = analysisType === 'PA';
   const annotationLabels = usePaAnalysis ? paAnnotationLabels : bwAnnotationLabels;
   const teethInSlot = slotConfigurations[slotId].teeth;
-
+  const allTeeth = Array.from(new Set([...(teethInSlot || []), ...extraTeeth]));
   // Load models
   useEffect(() => {
     if (aiInitialized.current) return;
@@ -406,12 +412,18 @@ const ImageAnalyzer = ({ onClose, onSave, slotId, isVertical, initialData }) => 
   
   // Sync initial data later
   useEffect(() => {
-    if (initialData?.processedImage) {
-      setProcessedImage(initialData.processedImage);
-      setCompletedReports(initialData.reports || []);
-      setStep(ProcessingStep.ANNOTATE);
-    }
-  }, [initialData]);
+  // Hydrate from props only once per slot mount.
+  if (hydratedOnceRef.current) return;
+
+  if (initialData?.processedImage) {
+    setProcessedImage(initialData.processedImage);
+    setCompletedReports(initialData.reports || []);
+    setStep(ProcessingStep.ANNOTATE);
+  } else {
+    setStep(ProcessingStep.UPLOAD);
+  }
+  hydratedOnceRef.current = true;
+}, [initialData, slotId]);
   
   // --------- Drawing helpers ----------
   const drawAIPendingOverlay = (ctx) => {
@@ -527,7 +539,7 @@ const draw = useCallback(() => {
     // Corner handles
     keystonePoints.forEach(p => {
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 7, 0, 2 * Math.PI);
+      ctx.arc(p.x, p.y, 12, 0, 2 * Math.PI);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
       ctx.strokeStyle = 'rgba(59,130,246,1)';
@@ -622,7 +634,7 @@ const draw = useCallback(() => {
   img.src = processedImage;
 }, [processedImage, draw]);
   // Pointer interactions
-  const near = (p, q, r = 12) => Math.hypot(p.x - q.x, p.y - q.y) <= r;
+  const near = (p, q, r = 20) => Math.hypot(p.x - q.x, p.y - q.y) <= r;
   const getCanvasPoint = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -735,8 +747,40 @@ const draw = useCallback(() => {
       };
       reader.readAsDataURL(file);
     }
+    autosave();
   };
-
+  // Rotate Function
+  const handleRotate90 = () => {
+if (!originalImage) return;
+const src = originalImage;
+const can = document.createElement('canvas');
+can.width = src.height; // swap
+can.height = src.width;
+const ctx = can.getContext('2d');
+ctx.translate(can.width / 2, can.height / 2);
+ctx.rotate(Math.PI / 2);
+ctx.drawImage(src, -src.width / 2, -src.height / 2);
+const dataUrl = can.toDataURL();
+const img = new Image();
+img.onload = () => {
+setOriginalImage(img);
+// re-size the working canvas similar to handleFileChange
+const MAX_DIM = 500;
+let newWidth, newHeight;
+if (img.width > img.height) { newWidth = MAX_DIM; newHeight = (img.height * MAX_DIM) / img.width; }
+else { newHeight = MAX_DIM; newWidth = (img.width * MAX_DIM) / img.height; }
+setCanvasSize({ width: newWidth, height: newHeight });
+const marginX = newWidth * 0.2, marginY = newHeight * 0.2;
+setKeystonePoints([
+{ x: marginX, y: marginY },
+{ x: newWidth - marginX, y: marginY },
+{ x: newWidth - marginX, y: newHeight - marginY },
+{ x: marginX, y: newHeight - marginY }
+]);
+};
+img.src = dataUrl;
+autosave();
+};
   // No-crop upload (analyze in place)
   const handleFileChangeAIDirect = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -753,6 +797,7 @@ const draw = useCallback(() => {
         setActiveTooth(null);
         setAnnotationSubStep('SELECT');
         setStep(ProcessingStep.ANNOTATE);
+        autosave();
       };
       reader.readAsDataURL(file);
     }
@@ -764,7 +809,11 @@ const draw = useCallback(() => {
     setStep(ProcessingStep.ANNOTATE); // Switch to the annotation view
     setShowPreAnalyzeModal(false);
   };
-  
+  useEffect(() => {
+  if (!processedImage) return;       // ignore empty state
+  if (step !== ProcessingStep.ANNOTATE) return;
+  autosave();                        // debounced; safe to run on each report change
+  }, [completedReports, processedImage, step]);
   useEffect(() => {
     if (step !== ProcessingStep.ANNOTATE || !preAnalyzedData) return;
 
@@ -878,6 +927,7 @@ logMapping(
     setProcessedImage(tempCanvas.toDataURL());
     setAiUploadOnly(false);
     setStep(ProcessingStep.ANNOTATE);
+    
   };
 
   // ---------- Manual analyze ----------
@@ -938,20 +988,102 @@ logMapping(
       annotations: annotationPoints
     };
 
-    setCompletedReports(prev => [...prev.filter(r => pendingDetections.length.id !== activeTooth.id), newReport]);
+    setCompletedReports(prev => [
+...prev.filter(r => r.id !== activeTooth.id),
+newReport
+]);
+    
     setActiveTooth(null);
     setAnnotationSubStep('SELECT');
     setToothAxisPoints([]);
     setAnnotationPoints([]);
     setLockDetSelection(false);
   };
+  const deleteReport = (id) => {
+setCompletedReports(prev => prev.filter(r => r.id !== id));
+if (activeTooth?.id === id) {
+setActiveTooth(null);
+setAnnotationSubStep('SELECT');
+setToothAxisPoints([]);
+setAnnotationPoints([]);
 
+}
+
+};
   const handleSave = () => {
     if (!processedImage) return;
     onSave({ id: slotId, processedImage, reports: completedReports });
     onClose();
   };
 
+  const persistAll = useCallback(async ({ silent = false } = {}) => {
+  try {
+    const payload = {
+      id: slotId,
+      processedImage,
+      reports: completedReports,
+      extraTeeth,
+      __silent: silent,
+    };
+    if (typeof onSave === 'function') {
+      onSave(payload);
+    }
+    if (!silent) console.debug('[persistAll] saved');
+  } catch (e) {
+    if (!silent) console.error('[persistAll] failed', e);
+  }
+}, [onSave, slotId, processedImage, completedReports, extraTeeth]);
+const persistAllRef = useRef(persistAll);
+useEffect(() => {
+  persistAllRef.current = persistAll;
+}, [persistAll]);
+const debouncedAutosave = useMemo(() => {
+  let timer;
+  const debounced = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      // When it fires, it calls the *latest* function from the ref.
+      persistAllRef.current({ silent: true });
+    }, 800); // 800ms delay
+  };
+  // A function to cancel any pending save.
+  debounced.cancel = () => {
+    clearTimeout(timer);
+  };
+  return debounced;
+}, []); // Empty dependency array ensures this is created only once.
+useEffect(() => {
+  if (processedImage && step === ProcessingStep.ANNOTATE) {
+    debouncedAutosave();
+  }
+  // Cleanup function to cancel the timer if the component unmounts.
+  return () => {
+    debouncedAutosave.cancel();
+  };
+}, [processedImage, completedReports, step, debouncedAutosave]);
+const autosaveRef = useRef(() => {});
+useEffect(() => {
+  const debounce = (fn, wait = 800) => {
+    let t;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), wait);
+    };
+  };
+  autosaveRef.current = debounce(() => persistAll({ silent: true }), 800);
+}, [persistAll]);
+const handleSaveOnClose = () => {
+  debouncedAutosave.cancel();
+  persistAll({ silent: true });
+  onClose();
+};
+
+const handleSaveAllAndClose = async () => {
+  debouncedAutosave.cancel();
+  await persistAll({ silent: false });
+  onClose && onClose();
+};
+const autosave = () => autosaveRef.current?.();
   const selectToothForAnalysis = (toothNumber, side) => {
   // If user has selected an AI detection, assign it directly
   if (activeDetId) {
@@ -1011,7 +1143,11 @@ const { toCanvas } = makeLetterboxToCanvas(iw, ih, cw, ch);
       setIsAnalyzingAi(false);
     }
   };
-
+  const clearAiDetections = () => {
+setPendingDetections([]);
+setActiveDetId(null);
+setHoverDetId(null);
+};
   const assignDetectionToTooth = (detId, toothNumber, side) => {
     const det = pendingDetections.find(d => d.id === detId);
     if (!det) return;
@@ -1088,10 +1224,14 @@ const { toCanvas } = makeLetterboxToCanvas(iw, ih, cw, ch);
               onPointerCancel={handleInteractionEnd}
               onPointerLeave={(e) => { setMousePos(null); setHoverDetId(null); handleInteractionEnd(e); }}
             ></canvas>
-            <div className="text-center mt-4">
-              <button onClick={processKeystone} className="px-6 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-md font-semibold transition-colors">
-                Confirm & Crop
-              </button>
+            <div className="text-center mt-4 flex items-center justify-center gap-3">
+            <button onClick={processKeystone} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold transition-colors">
+            Confirm & Crop
+            </button>
+            <button onClick={handleRotate90} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-md border inline-flex items-center gap-2">
+            <RotateIcon className="w-4 h-4" />
+            Rotate 90°
+            </button>
             </div>
           </div>
         );
@@ -1114,15 +1254,27 @@ const { toCanvas } = makeLetterboxToCanvas(iw, ih, cw, ch);
               <div className="flex flex-wrap justify-between items-center mb-2 gap-2">
                 <h3 className="text-lg font-semibold text-gray-800">Step 2: Analyze Teeth</h3>
                 <div className="flex items-center gap-2">
-                  <button
-  onClick={runAiAnalyze}
-  disabled={aiModelsLoading || !processedImage || isAnalyzingAi}
-  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400"
-  title="Run AI analysis"
+                  {
+pendingDetections.length === 0 ? (
+<button
+onClick={runAiAnalyze}
+disabled={aiModelsLoading || !processedImage || isAnalyzingAi}
+className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400"
+title="Run AI analysis"
 >
-  <MagicWandIcon className={`w-4 h-4 ${isAnalyzingAi ? 'animate-spin' : ''}`} />
-  <span>{isAnalyzingAi ? 'Analyzing…' : 'AI Analyze'}</span>
+<MagicWandIcon className={`w-4 h-4 ${isAnalyzingAi ? 'animate-spin' : ''}`} />
+<span>{isAnalyzingAi ? 'Analyzing…' : 'AI Analyze'}</span>
 </button>
+) : (
+<button
+onClick={clearAiDetections}
+className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-purple-600 text-white hover:bg-purple-700"
+title="Clear AI detections"
+>
+Clear AI detection
+</button>
+)
+}
                   <button
                     onClick={handleStartOver}
                     className="ml-2 flex items-center gap-2 px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-semibold"
@@ -1181,7 +1333,7 @@ const { toCanvas } = makeLetterboxToCanvas(iw, ih, cw, ch);
               <div>
                 <h4 className="font-semibold mb-2 text-gray-800">1. Select a tooth area to analyze/edit:</h4>
                 <div className="flex flex-wrap gap-2">
-                  {teethInSlot.map(tooth => {
+                  {allTeeth.map(tooth => {
                     const reportM = completedReports.find(r => r.id === `${tooth}M`);
                     const reportD = completedReports.find(r => r.id === `${tooth}D`);
 
@@ -1209,15 +1361,57 @@ const { toCanvas } = makeLetterboxToCanvas(iw, ih, cw, ch);
                       </div>
                     );
                   })}
+                  {addingTooth ? (
+<div className="flex items-center gap-2">
+<input
+value={newTooth}
+onChange={(e) => setNewTooth(e.target.value.trim())}
+placeholder="e.g., 24"
+className="w-20 px-2 py-1 border rounded"
+maxLength={2}
+/>
+<button
+onClick={() => {
+const v = newTooth;
+if (!/^\d{2}$/.test(v)) return alert('Enter a two-digit tooth number (FDI).');
+if (!allTeeth.includes(v)) setExtraTeeth(prev => [...prev, v]);
+setNewTooth('');
+setAddingTooth(false);
+}}
+className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded"
+>
+Add
+</button>
+<button onClick={() => { setAddingTooth(false); setNewTooth(''); }} className="px-2 py-1 bg-gray-200 rounded">Cancel</button>
+</div>
+) : (
+<button onClick={() => setAddingTooth(true)} className="px-3 py-1 border rounded bg-white hover:bg-gray-50">
++ Add tooth
+</button>
+)}
                 </div>
               </div>
 
               {activeTooth && (
                 <div className="mt-4">
-                  <h4 className="font-semibold mb-2 text-gray-800">
-                    Analysis for Tooth {activeTooth.number} ({activeTooth.side === 'M' ? 'Mesial' : 'Distal'}):
+<h4 className="text-base font-semibold text-gray-800 mb-1 flex items-center justify-between">                    
+  <span>
+  Analysis for Tooth {activeTooth.number} ({activeTooth.side === 'M' ? 'Mesial' : 'Distal'}) : 
+               </span>     
+                    <button
+onClick={() => {
+setActiveTooth(null);
+setAnnotationSubStep('SELECT');
+setToothAxisPoints([]);
+setAnnotationPoints([]);
+setLockDetSelection(false);
+}}
+className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md text-sm"
+>
+Cancel
+</button>
                   </h4>
-
+                  
                   {annotationSubStep === 'DRAW_AXIS' && <p className="text-sm text-gray-600">Defining axis… ({toothAxisPoints.length}/2 points)</p>}
 
                   {annotationSubStep === 'PLACE_POINTS' && (
@@ -1230,9 +1424,11 @@ const { toCanvas } = makeLetterboxToCanvas(iw, ih, cw, ch);
                             {annotationPoints.length === i && <span className="text-blue-600 animate-pulse font-bold">&larr; Current</span>}
                           </li>
                         ))}
+                        
                       </ul>
 
                       <div className="mt-4 flex gap-2">
+                        
                         <button
                           onClick={() => {
   setAnnotationPoints([]);
@@ -1263,18 +1459,24 @@ const { toCanvas } = makeLetterboxToCanvas(iw, ih, cw, ch);
                       .sort((a, b) => a.toothNumber.localeCompare(b.toothNumber) || a.side.localeCompare(b.side))
                       .map(r => (
                         <div key={r.id} className="bg-white p-2 rounded border border-gray-200 shadow-sm">
-                          <p className="font-bold text-base text-gray-800">
-                            T{r.toothNumber}{r.side}:
-                            <span className={`font-bold ml-2 ${
-                              r.prognosis === PrognosisLevel.GOOD ? 'text-green-600' :
-                              r.prognosis === PrognosisLevel.FAIR ? 'text-yellow-600' :
-                              r.prognosis === PrognosisLevel.POOR ? 'text-orange-600' :
-                              r.prognosis === PrognosisLevel.QUESTIONABLE ? 'text-red-600' :
-                              r.prognosis === PrognosisLevel.HOPELESS ? 'text-purple-600' : ''
-                            }`}>
-                              {r.prognosis}
-                            </span>
-                          </p>
+<div className="flex items-start justify-between">
+<p className="font-bold text-base text-gray-800">
+T{r.toothNumber}{r.side}:
+<span className={`font-bold ml-2 ${
+r.prognosis === PrognosisLevel.GOOD ? 'text-green-600' :
+r.prognosis === PrognosisLevel.FAIR ? 'text-yellow-600' :
+r.prognosis === PrognosisLevel.POOR ? 'text-orange-600' :
+r.prognosis === PrognosisLevel.QUESTIONABLE ? 'text-red-600' :
+r.prognosis === PrognosisLevel.HOPELESS ? 'text-purple-600' : ''
+}`}>
+{r.prognosis}
+</span>
+</p>
+<button onClick={() => deleteReport(r.id)} className="p-1 rounded hover:bg-red-50 text-red-600" title="Delete this analysis">
+<TrashIcon className="w-4 h-4" />
+</button>
+</div>
+                          
                           {r.rblPercentForStaging !== -1 ? (
                             <div className="text-xs text-gray-600 mt-1 space-y-0.5">
                               <p><strong>Loss:</strong> {r.attachmentLossMm}mm | <strong>Prognosis:</strong> {r.prognosis}</p>
@@ -1292,7 +1494,7 @@ const { toCanvas } = makeLetterboxToCanvas(iw, ih, cw, ch);
               )}
 
               <div className="mt-auto pt-4">
-                <button onClick={handleSave} className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-md font-semibold text-lg">
+                <button onClick={handleSaveAllAndClose} className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-md font-semibold text-lg">
                   Save All & Close
                 </button>
               </div>
@@ -1310,7 +1512,7 @@ const { toCanvas } = makeLetterboxToCanvas(iw, ih, cw, ch);
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center p-4 z-50">
       <div className="bg-white rounded-xl p-6 w-full max-w-6xl relative max-h-[90vh] overflow-y-auto shadow-2xl">
-        <button onClick={onClose} className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 z-10 p-1 rounded-full bg-gray-100 hover:bg-gray-200">
+        <button onClick={handleSaveOnClose} className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 z-10 p-1 rounded-full bg-gray-100 hover:bg-gray-200">
           <CloseIcon className="w-6 h-6" />
         </button>
         {renderStepContent()}
