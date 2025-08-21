@@ -108,24 +108,46 @@ const LandingPage = () => {
         </footer>
 
         {/* --- VERSION BUTTON --- */}
-        <button 
-            onClick={() => setReleaseNotesOpen(true)}
-            className="fixed bottom-6 left-6 bg-gray-700 text-white px-4 py-2 rounded-full shadow-lg hover:bg-gray-800 transform hover:scale-105 transition-all duration-200 text-sm font-semibold"
-            title="View Release Notes"
-        >
-            Version 1.1.3.1
-        </button>
+        {/* --- VERSION BUTTON (Bottom Left) --- */}
+<button 
+  onClick={() => setReleaseNotesOpen(true)}
+  className="fixed bottom-6 left-6 bg-gray-700 text-white px-4 py-2 rounded-full shadow-lg hover:bg-gray-800 transform hover:scale-105 transition-all duration-200 text-sm font-semibold"
+  title="View Release Notes"
+>
+  Version 1.1.3.1
+</button>
 
-        {/* --- QR DONATE BUTTON --- */}
-        <a 
-            href="#/qr-donate"
-            className="fixed bottom-6 right-6 bg-white p-3 rounded-full shadow-lg hover:shadow-xl transform hover:scale-110 transition-all duration-200"
-            title="Donate via QR Code"
-        >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-        </a>
+
+{/* --- CONTAINER FOR BUTTONS (Bottom Right) --- */}
+<div className="fixed bottom-6 right-6 flex items-center space-x-4">
+
+  {/* --- COMMENT TO ADMIN BUTTON --- */}
+  <a 
+    href="https://forms.gle/e57nSJDcA16vwAtPA" 
+    target="_blank" 
+    rel="noopener noreferrer"
+    className="inline-flex items-center justify-center px-4 py-3 space-x-2 text-sm font-semibold text-white bg-gray-700 rounded-full shadow-lg hover:bg-gray-600 transform hover:scale-105 transition-all duration-200"
+    title="Comment to Admin"
+  >
+    {/* SVG Comment Icon */}
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+      <path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.08-3.242A8.92 8.92 0 012 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM4.832 14.168L5.5 12.021A7.004 7.004 0 004 10c0-3.14 2.895-5.7 6.5-5.7s6.5 2.56 6.5 5.7-2.895 5.7-6.5 5.7c-1.253 0-2.42-.316-3.468-.862l-.718-.397z" clip-rule="evenodd" />
+    </svg>
+    <span>Comment</span>
+  </a>
+
+  {/* --- QR DONATE BUTTON --- */}
+  <a 
+    href="#/qr-donate"
+    className="bg-white p-3 rounded-full shadow-lg hover:shadow-xl transform hover:scale-110 transition-all duration-200"
+    title="Donate via QR Code"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+    </svg>
+  </a>
+
+</div>
 
         {/* --- RELEASE NOTES MODAL --- */}
         {isReleaseNotesOpen && <ReleaseNotesModal onClose={() => setReleaseNotesOpen(false)} />}
