@@ -1,7 +1,9 @@
 // src/components/VoiceControlledPeriodontalChartApp.jsx
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { exportChartAsPdf } from '../utils/pdf-exporter';
+import ExportPDFModal from './ExportPDFModal';
+import generatePerioPDF from '../utils/perio-pdf-exporter';
 import ToothChart from './ToothChart';
 import ChartSummary from './ChartSummary';
 import PatientInfo from './PatientInfo';
@@ -16,7 +18,13 @@ import { useChartStateMachine } from '../hooks/useChartStateMachine';
 import { thaiNormalize, thaiNumberParser } from '../utils/thai-language-utils';
 import { perioInterpreter } from '../utils/perio-interpreter';
 import { INITIAL_CHART_DATA, createVoiceChartingOrder, MGJ_CHARTING_QUADRANTS } from '../chart.config.js';
-
+import DxPxModal from './DxPxModal';
+import AccountModal from '../auth/AccountModal';
+import CloudSyncPanel from './CloudSyncPanel';
+import { auth } from '../services/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { savePerioChart, getPerioPatient } from '../services/firestore';
+import { logOut } from '../auth/auth';
 // --- Configuration ---
 const DEFAULT_SEQUENCE = [
     { id: 'Q1B', label: 'Q1 Buccal', direction: 'LR' }, { id: 'Q2B', label: 'Q2 Buccal', direction: 'LR' },
@@ -31,15 +39,36 @@ const STOP_KEYWORDS = ['จบ', 'หยุด'];
 const getInitialState = () => {
     const savedState = localStorage.getItem('voicePeriodontalChartCurrentState');
     if (savedState) {
-        try { return JSON.parse(savedState); }
-        catch (e) { console.error("Failed to parse saved voice chart state:", e); }
+        try {
+            return JSON.parse(savedState);
+        } catch (e) {
+            console.error("Failed to parse saved voice chart state:", e);
+        }
     }
-    return { chartData: INITIAL_CHART_DATA, missingTeeth: [], patientHN: '', patientName: '' };
+    // Add clinicalNotes to the default return object
+    return {
+        chartData: INITIAL_CHART_DATA,
+        missingTeeth: [],
+        patientHN: '',
+        patientName: '',
+        clinicalNotes: '', // Add this line
+    };
 };
 
 // --- Component ---
 export default function VoiceControlledPeriodontalChartApp() {
+  const [authUser, setAuthUser] = useState(null);
+useEffect(() => {
+  const unsub = onAuthStateChanged(auth, setAuthUser);
+  return () => unsub();
+}, []);
+const effectiveUser = authUser; // for symmetry with the other page
+const userMenuRef = useRef(null);
+const [isUserMenuOpen, setUserMenuOpen] = useState(false);
+const [isAccountModalOpen, setAccountModalOpen] = useState(false);
+const [isCloudOpen, setCloudOpen] = useState(false);
   const [initialState] = useState(getInitialState);
+  const [inspectingTooth, setInspectingTooth] = useState(null);
   const [chartData, setChartData] = useState(initialState.chartData);
   const [missingTeeth, setMissingTeeth] = useState(initialState.missingTeeth);
   const [patientHN, setPatientHN] = useState(initialState.patientHN);
@@ -55,12 +84,45 @@ export default function VoiceControlledPeriodontalChartApp() {
   const [customSequence, setCustomSequence] = useState(DEFAULT_SEQUENCE);
   const [showCustomizer, setShowCustomizer] = useState(false);
   const [editingTooth, setEditingTooth] = useState(null);
-
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [clinicalNotes, setClinicalNotes] = useState(initialState.clinicalNotes || '');
+   const handleLogout = async () => {
+    try {
+      await logOut();
+      setUserMenuOpen(false);
+      setCloudOpen(false);
+    } catch (e) {
+      alert('Log out failed: ' + (e?.message || String(e)));
+    } finally {
+      window.location.reload();
+    }
+  };
   useEffect(() => {
-    const currentState = { chartData, missingTeeth, patientHN, patientName };
-    localStorage.setItem('voicePeriodontalChartCurrentState', JSON.stringify(currentState));
-  }, [chartData, missingTeeth, patientHN, patientName]);
-
+  const currentState = { chartData, missingTeeth, patientHN, patientName, clinicalNotes };
+  localStorage.setItem('voicePeriodontalChartCurrentState', JSON.stringify(currentState));
+}, [chartData, missingTeeth, patientHN, patientName, clinicalNotes]);
+  useEffect(() => {
+  // ShareRedeemPage stashes { ownerUid, hn } before redirect
+  const raw = localStorage.getItem('pendingLoad');
+  if (!raw || !effectiveUser) return;
+  try {
+    const { ownerUid, hn } = JSON.parse(raw);
+    getPerioPatient(ownerUid, hn).then(data => {
+      if (!data) return;
+      setChartData(data.chartData);
+      setMissingTeeth(data.missingTeeth || []);
+      setPatientHN(data.patientHN || hn);
+      setPatientName(data.patientName || '');
+      setClinicalNotes(data.clinicalNotes || '');
+      alert(`Loaded "${data.patientHN || hn}" from shared link/code.`);
+      // dispatch({ type: 'RESET' }); // optional: reset voice charting state
+    }).finally(() => {
+      localStorage.removeItem('pendingLoad');
+    });
+  } catch {
+    localStorage.removeItem('pendingLoad');
+  }
+}, [effectiveUser]);
   useEffect(() => {
     const savedHistory = localStorage.getItem('periodontalChartHistory');
     if (savedHistory) setHistory(JSON.parse(savedHistory));
@@ -80,7 +142,38 @@ export default function VoiceControlledPeriodontalChartApp() {
     MGJ_CHARTING_QUADRANTS[mgjQuadrantIndex]?.filter(toothId => !missingTeeth.includes(toothId)) || [],
     [missingTeeth, mgjQuadrantIndex]
   );
+  const handleSyncToCloud = async () => {
+  if (!effectiveUser) { alert("Please log in first."); return; }
+  if (!patientHN?.trim()) { alert("Please enter a Patient HN before saving."); return; }
+  try {
+    await savePerioChart(effectiveUser.uid, patientHN.trim(), chartData, missingTeeth, clinicalNotes || '');
+    alert(`Patient ${patientHN} saved to cloud.`);
+    setAccountModalOpen(false);
+  } catch (error) {
+    alert("Error saving to cloud: " + (error?.message || String(error)));
+  }
+};
 
+const handleLoadFromCloud = async () => {
+  if (!effectiveUser) { alert("Please log in first."); return; }
+  const hnToLoad = prompt("Enter the Patient HN to load from the cloud:");
+  if (!hnToLoad) return;
+  try {
+    const cloudData = await getPerioPatient(effectiveUser.uid, hnToLoad.trim());
+    if (!cloudData) { alert(`No data found for ${hnToLoad}.`); return; }
+    setChartData(cloudData.chartData);
+    setMissingTeeth(cloudData.missingTeeth || []);
+    setPatientHN(cloudData.patientHN || hnToLoad.trim());
+    setPatientName(cloudData.patientName || '');
+    setClinicalNotes(cloudData.clinicalNotes || '');
+    alert(`Loaded ${hnToLoad} from cloud.`);
+    // voice state machine reset if you need it:
+    // dispatch({ type: 'RESET' });
+    setAccountModalOpen(false);
+  } catch (error) {
+    alert("Error loading from cloud: " + (error?.message || String(error)));
+  }
+};
   const applyPdReData = useCallback((dataToApply) => {
     if (!dataToApply || !dataToApply.activeInfo) return;
     const { toothId, sites } = dataToApply.activeInfo;
@@ -220,12 +313,30 @@ export default function VoiceControlledPeriodontalChartApp() {
     setMissingTeeth([]);
     setPatientHN('');
     setPatientName('');
+    setClinicalNotes('');
     setClearConfirmOpen(false);
     dispatch({ type: 'RESET' });
   };
+  const handleOpenDxPxModal = (toothId) => {
+    setInspectingTooth({
+      toothId: toothId,
+      data: chartData[toothId]
+    });
+  };
 
+  const handleSaveDxPx = (toothId, dxpxCode, fullPrognosis) => {
+    setChartData(prev => {
+      const newData = JSON.parse(JSON.stringify(prev));
+      if (!newData[toothId]) {
+          newData[toothId] = {};
+      }
+      newData[toothId].dxpx = dxpxCode;
+      newData[toothId].prognosis = fullPrognosis; // Save the full text for the modal
+      return newData;
+    });
+  };
   const handleSaveChart = () => {
-    const newHistoryEntry = { id: Date.now(), date: new Date().toISOString(), chartData, missingTeeth, patientHN, patientName };
+    const newHistoryEntry = { id: Date.now(), date: new Date().toISOString(), chartData, missingTeeth, patientHN, patientName, clinicalNotes };
     const updatedHistory = [newHistoryEntry, ...history];
     setHistory(updatedHistory);
     localStorage.setItem('periodontalChartHistory', JSON.stringify(updatedHistory));
@@ -238,8 +349,9 @@ export default function VoiceControlledPeriodontalChartApp() {
       setChartData(chartToLoad.chartData);
       setMissingTeeth(chartToLoad.missingTeeth);
       setPatientHN(chartToLoad.patientHN || '');
-      setPatientName(chartToLoad.patientName || '');
-      dispatch({ type: 'RESET' });
+setPatientName(chartToLoad.patientName || '');
+setClinicalNotes(chartToLoad.clinicalNotes || ''); // ADD THIS LINE
+dispatch({ type: 'RESET' });
       alert(`Chart from ${new Date(chartToLoad.date).toLocaleString()} loaded.`);
     }
   };
@@ -315,6 +427,26 @@ export default function VoiceControlledPeriodontalChartApp() {
     }));
     setEditingTooth(null);
   };
+  const handleExportPDF = (exportOptions) => {
+    if (!exportOptions) {
+      setIsExportModalOpen(true);
+      return;
+    }
+
+    const summaryData = {
+        bopCount: document.querySelectorAll('#chart-summary-pdf .text-red-500').length,
+    };
+    const chartArray = Object.entries(chartData).map(([id, data]) => ({ id: String(id), ...data, }));
+
+    generatePerioPDF(
+      { patientHN, patientName, clinicalNotes }, // Pass notes here
+      chartArray,
+      missingTeeth,
+      summaryData.bopCount,
+      exportOptions
+    );
+    setIsExportModalOpen(false);
+};
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 p-4 font-sans">
@@ -325,6 +457,42 @@ export default function VoiceControlledPeriodontalChartApp() {
               <h1 className="text-3xl font-bold text-blue-700">Voice Periodontal Chart <span className="text-base align-top bg-blue-100 text-blue-600 p-1 rounded">Beta</span></h1>
             </div>
             <div className="space-x-2 flex items-center">
+              {effectiveUser && (
+    <div ref={userMenuRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setUserMenuOpen((v) => !v)}
+        className="max-w-[220px] truncate px-3 py-2 rounded-lg border bg-white text-gray-700 hover:bg-gray-50"
+        aria-haspopup="menu"
+        aria-expanded={isUserMenuOpen ? 'true' : 'false'}
+        title={effectiveUser.email}
+      >
+        {effectiveUser.email}
+      </button>
+
+      {isUserMenuOpen && (
+        <div
+          role="menu"
+          className="absolute right-0 mt-2 w-44 rounded-lg border bg-white shadow-lg overflow-hidden"
+        >
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full text-left px-4 py-2 text-red-600 hover:bg-gray-50"
+            role="menuitem"
+          >
+            Log out
+          </button>
+        </div>
+      )}
+    </div>
+  )}
+                <button
+  onClick={() => (effectiveUser ? setCloudOpen(true) : setAccountModalOpen(true))}
+  className="px-4 py-2 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors h-10"
+>
+  {effectiveUser ? 'EasySync' : 'Login for EasySync'}
+</button>
                 {isEditMode && (
                     <button 
                         onClick={() => setIsEditMode(false)}
@@ -336,7 +504,7 @@ export default function VoiceControlledPeriodontalChartApp() {
                 <Dropdown label="Save">
                   <button onClick={handleSaveChart} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Save Draft</button>
                   <button onClick={handleDownload} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Download JSON</button>
-                  <button onClick={() => exportChartAsPdf(patientHN, patientName)} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Export PDF</button>
+                  <button onClick={() => handleExportPDF(null)} className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Export PDF</button>
                   <label className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer">
                     Upload JSON
                     <input type="file" accept=".json" className="hidden" onChange={handleUpload} />
@@ -376,12 +544,23 @@ export default function VoiceControlledPeriodontalChartApp() {
               missingTeeth={missingTeeth}
               isEditMode={isEditMode}
               onDataCellClick={handleOpenEditModal}
+              onDxPxClick={handleOpenDxPxModal}
            />
         </div>
 
         <div id="chart-summary-pdf">
           <ChartSummary chartData={chartData} missingTeeth={missingTeeth} />
         </div>
+        {/* ADD THIS ENTIRE SECTION */}
+<div className="mt-6">
+    <h2 className="text-xl font-bold text-gray-700 mb-2">Clinical Notes & Impressions</h2>
+    <textarea
+        value={clinicalNotes}
+        onChange={(e) => setClinicalNotes(e.target.value)}
+        placeholder="Enter any clinical notes, treatment plans, or diagnostic impressions here..."
+        className="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+    />
+</div>
         
         <HistoryPanel history={history} onLoad={handleLoadChart} onDelete={handleDeleteChart} />
       </div>
@@ -432,6 +611,43 @@ export default function VoiceControlledPeriodontalChartApp() {
       >
         <p>Are you sure you want to clear all patient information and charting data? This action cannot be undone.</p>
       </ConfirmationModal>
+      <ExportPDFModal
+    isOpen={isExportModalOpen}
+    onClose={() => setIsExportModalOpen(false)}
+    onExport={handleExportPDF}
+    patientInfo={{ patientName, patientHN }}
+/>
+{inspectingTooth && (
+        <DxPxModal
+            tooth={inspectingTooth}
+            onClose={() => setInspectingTooth(null)}
+            onSave={handleSaveDxPx}
+        />
+    )}
+    {isAccountModalOpen && (
+  <AccountModal
+    user={effectiveUser}
+    onClose={() => setAccountModalOpen(false)}
+    onSync={handleSyncToCloud}
+    onLoad={handleLoadFromCloud}
+  />
+)}
+
+<CloudSyncPanel
+  open={isCloudOpen}
+  user={effectiveUser}
+  onClose={() => setCloudOpen(false)}
+  draft={{ patientHN, patientName, chartData, missingTeeth, clinicalNotes }}
+  onLoadIntoChart={(cloudData) => {
+    setChartData(cloudData.chartData);
+    setMissingTeeth(cloudData.missingTeeth || []);
+    setPatientHN(cloudData.patientHN || '');
+    setPatientName(cloudData.patientName || '');
+    setClinicalNotes(cloudData.clinicalNotes || '');
+    alert(`Loaded "${cloudData.patientHN}" from cloud.`);
+    // dispatch({ type: 'RESET' }); // optional after load
+  }}
+/>
     </div>
   );
 }

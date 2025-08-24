@@ -24,7 +24,15 @@ const LINGUAL_SITES_RL = ['ml', 'l', 'dl'];
 
 export const INITIAL_CHART_DATA = ALL_TEETH.reduce((acc, toothId) => {
   acc[toothId] = {
-    pd: {}, re: {}, mgj: { b: null, l: null }, bleeding: {}, suppuration: {},
+    pd: {},                   // 3-site per side
+    re: {},                   // 3-site per side
+    mgj: { b: null, l: null },// single value per side (you only use buccal in overlay)
+    bleeding: {},             // 3-site per side
+    suppuration: {},          // (existing)
+
+    dxpx: '',                 // NEW: free-text Dx/Px row (one per tooth)
+    mo:   { b: null, l: null }, // NEW: mobility (grade) per side
+    f:    { b: null, l: null, mli: null, dli: null }, // NEW: furcation grade per side
   };
   return acc;
 }, {});
@@ -78,6 +86,12 @@ export const createChartingOrder = (missingTeeth = [], modes = {}, customSequenc
       }
       if (modes.mgj && surface === 'buccal') {
         order.push({ toothId, surface, site: 'b', type: 'mgj' });
+      }
+      if (modes.mo && surface === 'lingual') {
+      order.push({ toothId, surface, site: 'l', type: 'mo' });
+      }
+      if (modes.f && surface === 'lingual') {
+      order.push({ toothId, surface, site: 'l', type: 'f' });
       }
     });
   });

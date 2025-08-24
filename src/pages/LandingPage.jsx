@@ -45,13 +45,21 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
         <header className="bg-white shadow-md">
-            <div className="container mx-auto px-6 py-4 flex justify-between items-center">
-                <div>
-                    <h1 className="text-3xl font-bold text-blue-700">EasyPerio</h1>
-                    <p className="text-gray-500">by pooh</p>
-                </div>
+    <div className="container mx-auto px-6 py-4 flex justify-between items-center">
+        {/* This container aligns the logo and text side-by-side */}
+        <div className="flex items-center gap-3">
+            {/* Your logo is here */}
+            <img src="/favicon.svg" alt="EasyPerio Logo" className="h-12 w-12" />
+            <div>
+                <h1 className="text-3xl font-bold">
+  <span className="text-blue-900">Easy</span>
+  <span className="text-blue-500">Perio</span>
+</h1>
+                <p className="text-gray-500">by pooh</p>
             </div>
-        </header>
+        </div>
+    </div>
+</header>
 
         <main className="flex-grow container mx-auto px-6 py-12 flex items-center">
             <div className="w-full">
@@ -114,7 +122,7 @@ const LandingPage = () => {
   className="fixed bottom-6 left-6 bg-gray-700 text-white px-4 py-2 rounded-full shadow-lg hover:bg-gray-800 transform hover:scale-105 transition-all duration-200 text-sm font-semibold"
   title="View Release Notes"
 >
-  Version 1.1.3.1
+  Version 2.0
 </button>
 
 

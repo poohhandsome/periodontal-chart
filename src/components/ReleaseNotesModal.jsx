@@ -5,6 +5,8 @@ import React from 'react';
 import { CloseIcon } from './xray-analyzer/Icons';
 
 const releaseNotes = [
+    { version: '2.0', date: '2025-08-23',notes: ['Periodontal Chart Updated: Dx/Px, MO, and F, comprehensive PDF-Export','Add EasySync: Cloud Service for Online Storage'
+    ]},
     { version: '1.1.3.1', date: '2025-08-22',notes: ['XRay: Autosave Mounting and Tooth Analysis',
         'XRay: Add Essential Buttons for Users'
     ]},
