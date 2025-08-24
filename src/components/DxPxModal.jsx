@@ -218,7 +218,8 @@ const DxPxModal = ({ tooth, onClose, onSave }) => {
                     </div>
                     
                     {isPxChooserOpen && (
-                        <div ref={pxChooserRef} className="absolute top-1/2 -translate-y-1/2 left-full ml-4 bg-white p-2 rounded-lg shadow-lg border z-10">
+<div ref={pxChooserRef} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-4 rounded-lg shadow-2xl border z-20">
+
                             <div className="flex flex-col gap-1">
                                 {PROGNOSIS_LEVELS.map(level => (
                                     <button key={level} onClick={() => handlePxOverride(level)} className={`w-full text-left p-2 rounded-md font-semibold text-sm transition-colors ${prognosis.level === level ? 'bg-blue-600 text-white' : 'hover:bg-blue-50 text-gray-700'}`}>
