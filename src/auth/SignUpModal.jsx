@@ -18,22 +18,32 @@ export default function SignUpModal({ open, initialEmail = '', onClose }) {
   const [error, setError] = useState('');
   const [step, setStep] = useState('form'); // 'form' | 'info'
   const [resent, setResent] = useState(false);
+  const CONTINUE_BASE =
+  (import.meta.env.PROD && import.meta.env.VITE_PUBLIC_APP_URL) // e.g., "https://yourapp.vercel.app"
+  || window.location.origin;
+
+  const CONTINUE_URL = `${CONTINUE_BASE}#/auth-verified`;
   if (!open) return null;
   const handleResend = async () => {
   setError('');
   setIsLoading(true);
   setResent(false);
   try {
-    // Temporarily sign in with the same credentials, send a new verification, then sign out again.
     const { user } = await signInWithEmailAndPassword(auth, email.trim(), password);
     if (user.emailVerified) {
       await signOut(auth);
       setError('This email is already verified. You can now log in.');
       return;
     }
-    await sendEmailVerification(user, {
-      url: `${window.location.origin}${window.location.pathname}#/auth-verified`
-    });
+    try {
+      await sendEmailVerification(user, { url: CONTINUE_URL });
+    } catch (err) {
+      if (err?.code === 'auth/unauthorized-continue-uri') {
+        await sendEmailVerification(user);
+      } else {
+        throw err;
+      }
+    }
     await signOut(auth);
     setResent(true);
   } catch (e) {
@@ -42,33 +52,48 @@ export default function SignUpModal({ open, initialEmail = '', onClose }) {
     setIsLoading(false);
   }
 };
+
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
-    try {
-      // 1) create account (this signs the user in)
-      const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-      // 2) set display name
-      if (name.trim()) {
-        await updateProfile(cred.user, { displayName: name.trim() });
-      }
-      // 3) send verification email
-      await sendEmailVerification(cred.user, {url: `${window.location.origin}${window.location.pathname}#/auth-verified`});
-      // 4) immediately sign out — user must verify before using the app
-      await signOut(auth);
-      // 5) show the info step
-      setStep('info');
-    } catch (err) {
-      // Friendly messages for common cases
-      const msg = err?.code === 'auth/email-already-in-use'
-        ? 'This email is already registered. Please log in or use another email.'
-        : err?.message || String(err);
-      setError(msg);
-    } finally {
-      setIsLoading(false);
+  e.preventDefault();
+  setError('');
+  setIsLoading(true);
+  let createdUser = null;
+
+  try {
+    // 1) create account (signs the user in)
+    const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    createdUser = cred.user;
+
+    // 2) set display name
+    if (name.trim()) {
+      await updateProfile(createdUser, { displayName: name.trim() });
     }
-  };
+
+    // 3) send verification email with a continue URL
+    try {
+      await sendEmailVerification(createdUser, { url: CONTINUE_URL });
+    } catch (err) {
+      // If the domain is not allowlisted, fall back to default handler
+      if (err?.code === 'auth/unauthorized-continue-uri') {
+        await sendEmailVerification(createdUser); // no options → Google default page
+      } else {
+        throw err; // bubble up other errors
+      }
+    }
+
+    // 4) show the info step (we’ll sign out in finally)
+    setStep('info');
+  } catch (err) {
+    const msg = err?.code === 'auth/email-already-in-use'
+      ? 'This email is already registered. Please log in or use another email.'
+      : err?.message || String(err);
+    setError(msg);
+  } finally {
+    // 5) Always sign out after creating the account so unverified users can’t stay logged in
+    try { if (auth.currentUser) await signOut(auth); } catch {}
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="fixed inset-0 z-60 bg-black/50 flex items-center justify-center">

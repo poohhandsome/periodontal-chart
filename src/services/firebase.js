@@ -7,12 +7,12 @@ import { getFunctions } from "firebase/functions";
 
 // Your web app's Firebase configuration that you copied
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_API_KEY,
-  authDomain: import.meta.env.VITE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_APP_ID
+  apiKey: "AIzaSyCp3zQV3NOQgG0oOeq9-iA0GpTT1Xqdjjo",
+  authDomain: "easyperio-clinic.firebaseapp.com",
+  projectId: "easyperio-clinic",
+  storageBucket: "easyperio-clinic.firebasestorage.app",
+  messagingSenderId: "1041555736481",
+  appId: "1:1041555736481:web:5af3b62e5f7a1f10d5ede0"
 };
 
 // Initialize Firebase
